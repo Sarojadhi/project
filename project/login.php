@@ -1,114 +1,223 @@
 <?php
-session_start();
 
-if (isset($_SESSION['user_id'])) {
-    if ($_SESSION['role'] === 'admin') {
-        header('Location: admin/dashboard.php');
-        exit;
-    } elseif ($_SESSION['role'] === 'staff') {
-        header('Location: staff/dashboard.php');
-        exit;
-    } elseif ($_SESSION['role'] === 'farmer') {
-        header('Location: farmer/dashboard.php');
-        exit;
-    }
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/functions.php';
+
+$message = '';
+$username = '';
+
+
+// Redirect logged-in users
+if (isset($_SESSION['user_id'], $_SESSION['role'])) {
+    redirectToDashboard();
 }
 
-include 'config/db.php';
 
-$message = "";
-$username = "";
-
+// Login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 
-    $sql = "SELECT * FROM users WHERE username = '$username'";
-    $result = $conn->query($sql);
+    if ($username === '' || $password === '') {
 
-    if ($result->num_rows == 1) {
+        $message = 'Please enter username and password.';
 
-        $user = $result->fetch_assoc();
+    } else {
 
-        if (password_verify($password, $user['password'])) {
+        $stmt = $conn->prepare(
+            "SELECT id, username, password, role, full_name, status
+             FROM users
+             WHERE username = ?"
+        );
 
-            if ($user['status'] !== 'active') {
-                $message = "Your account is not active. Please contact admin.";
+        $stmt->bind_param('s', $username);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 1) {
+
+            $user = $result->fetch_assoc();
+
+            if (!password_verify($password, $user['password'])) {
+
+                $message = 'Invalid username or password.';
+
+            } elseif ($user['status'] !== 'active') {
+
+                $message = 'Your account is not active. Contact admin.';
+
             } else {
+
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['full_name'] = $user['full_name'];
 
-                if ($user['role'] === 'admin') {
-                    header('Location: admin/dashboard.php');
-                    exit;
-                } elseif ($user['role'] === 'staff') {
-                    header('Location: staff/dashboard.php');
-                    exit;
-                } elseif ($user['role'] === 'farmer') {
-                    header('Location: farmer/dashboard.php');
-                    exit;
-                }
+                redirectToDashboard();
             }
 
         } else {
-            $message = "Invalid username or password.";
+
+            $message = 'Invalid username or password.';
         }
 
-    } else {
-        $message = "Invalid username or password.";
+        $stmt->close();
     }
 }
 
-include 'includes/header.php';
 ?>
 
-<div class="min-h-screen flex items-center justify-center py-10">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Login - Shree Tri Shakti Dairy</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+<div class="min-h-screen flex items-center justify-center px-4">
+
     <div class="w-full max-w-md">
 
+        <!-- Title -->
         <div class="text-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-800">Shree Tri Shakti Dairy</h1>
-            <p class="text-gray-600 mt-1">Milk Collection Management System</p>
+
+            <h1 class="text-2xl font-bold text-gray-800">
+                Shree Tri Shakti Dairy
+            </h1>
+
+            <p class="text-sm text-gray-500 mt-1">
+                Milk Collection Management System
+            </p>
+
         </div>
 
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Login</h2>
 
-            <?php if ($message != ""): ?>
-                <div class="mb-4 p-3 rounded text-sm bg-red-100 text-red-700">
-                    <?php echo $message; ?>
-                </div>
-            <?php endif; ?>
+        <!-- Login card -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm">
 
-            <form method="POST" action="" id="loginForm">
+            <div class="px-6 py-4 border-b border-gray-200">
 
-                <div class="mb-4">
-                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
-                    <input type="text" id="username" name="username"
-                           value="<?php echo htmlspecialchars($username); ?>"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                    <span id="username-error" class="text-sm text-red-600"></span>
-                </div>
+                <h2 class="text-lg font-semibold text-gray-800">
+                    Sign In
+                </h2>
 
-                <div class="mb-4">
-                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" id="password" name="password"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
-                    <span id="password-error" class="text-sm text-red-600"></span>
-                </div>
+            </div>
 
-                <button type="submit" name="login"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                    Login
-                </button>
-            </form>
+
+            <div class="p-6">
+
+                <?php if ($message !== ''): ?>
+
+                    <div class="mb-4 p-3 rounded-md bg-red-50 border border-red-200">
+
+                        <p class="text-sm text-red-700">
+                            <?php echo e($message); ?>
+                        </p>
+
+                    </div>
+
+                <?php endif; ?>
+
+
+                <form
+                    method="POST"
+                    id="loginForm"
+                    novalidate
+                >
+
+                    <!-- Username -->
+                    <div class="mb-4">
+
+                        <label
+                            for="username"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                            Username
+                        </label>
+
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value="<?php echo e($username); ?>"
+                            placeholder="Enter your username"
+                            class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                        >
+
+                        <span
+                            id="username-error"
+                            class="text-sm text-red-600"
+                        ></span>
+
+                    </div>
+
+
+                    <!-- Password -->
+                    <div class="mb-6">
+
+                        <label
+                            for="password"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                            Password
+                        </label>
+
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Enter your password"
+                            class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                        >
+
+                        <span
+                            id="password-error"
+                            class="text-sm text-red-600"
+                        ></span>
+
+                    </div>
+
+
+                    <!-- Submit -->
+                    <button
+                        type="submit"
+                        name="login"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-md"
+                    >
+                        Sign In
+                    </button>
+
+                </form>
+
+            </div>
+
         </div>
 
     </div>
+
 </div>
 
-<script src="assets/js/validate-login.js"></script>
 
-<?php include 'includes/footer.php'; ?>
+<!-- JavaScript validation -->
+<script src="<?php echo BASE_URL; ?>/assets/js/validators.js"></script>
+<script src="<?php echo BASE_URL; ?>/assets/js/validate-login.js"></script>
+
+</body>
+
+</html>

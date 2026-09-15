@@ -1,49 +1,61 @@
-/**
- * Login form validation
- * 
- * Rules (login should be permissive — the server does the real check):
- * - Username must not be empty
- * - Password must not be empty
- * 
- * Note: Password complexity is NOT enforced here.
- * Complexity rules belong on the "create account" forms, not on login.
- * The server verifies credentials with password_verify().
- */
 
 document.addEventListener('DOMContentLoaded', function () {
 
-    var form = document.getElementById('loginForm');
-    var username = document.getElementById('username');
-    var password = document.getElementById('password');
+    const form = document.getElementById('loginForm');
+    const username = document.getElementById('username');
+    const password = document.getElementById('password');
 
-    var usernameError = document.getElementById('username-error');
-    var passwordError = document.getElementById('password-error');
+    const usernameError = document.getElementById('username-error');
+    const passwordError = document.getElementById('password-error');
 
-    // ----- Username: only check that it's not empty -----
+    // Stop if the required elements are missing
+    if (
+        !form ||
+        !username ||
+        !password ||
+        !usernameError ||
+        !passwordError
+    ) {
+        return;
+    }
+
+    const usernameRegex = /^[A-Za-z][A-Za-z0-9_]{2,}$/;
+
     function checkUsername() {
-        if (username.value.trim() === '') {
+        const value = username.value.trim();
+
+        if (value === '') {
             usernameError.textContent = 'Please enter your username.';
             return false;
         }
+
+        if (!usernameRegex.test(value)) {
+            usernameError.textContent =
+                'Username must start with a letter and contain at least 3 characters.';
+            return false;
+        }
+
         usernameError.textContent = '';
         return true;
     }
 
-    // ----- Password: only check that it's not empty -----
     function checkPassword() {
-        if (password.value === '') {
+        const value = password.value;
+
+        if (value === '') {
             passwordError.textContent = 'Please enter your password.';
             return false;
         }
+
         passwordError.textContent = '';
         return true;
     }
 
-    // Attach events
+    // Check when user leaves the field
     username.addEventListener('blur', checkUsername);
     password.addEventListener('blur', checkPassword);
 
-    // Clear error as soon as the user starts typing again
+    // Check again while fixing an error
     username.addEventListener('input', function () {
         if (usernameError.textContent !== '') {
             checkUsername();
@@ -56,21 +68,21 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // Submit handler
-    form.addEventListener('submit', function (e) {
-        var okUser = checkUsername();
-        var okPass = checkPassword();
+    // Final validation before submitting
+    form.addEventListener('submit', function (event) {
 
-        if (!okUser || !okPass) {
-            e.preventDefault();
-            if (!okUser) {
+        const validUsername = checkUsername();
+        const validPassword = checkPassword();
+
+        if (!validUsername || !validPassword) {
+            event.preventDefault();
+
+            if (!validUsername) {
                 username.focus();
-            } else if (!okPass) {
+            } else {
                 password.focus();
             }
-            return false;
         }
-        return true;
     });
 
 });

@@ -1,32 +1,27 @@
-/**
- * Dana entry form validation
- * 
- * Rules:
- * - Farmer must be selected
- * - Date must not be empty
- * - Date must not be in the future
- * - Item must be selected
- * - Quantity must be greater than 0
- */
-
 document.addEventListener('DOMContentLoaded', function () {
 
-    var form = document.getElementById('danaEntryForm');
-    var farmer = document.getElementById('farmer_id');
-    var date = document.getElementById('entry_date');
-    var item = document.getElementById('item_id');
-    var quantity = document.getElementById('quantity');
+    const form = document.getElementById('danaEntryForm');
 
-    var farmerError = document.getElementById('farmer-error');
-    var dateError = document.getElementById('date-error');
-    var itemError = document.getElementById('item-error');
-    var quantityError = document.getElementById('quantity-error');
+    if (!form) {
+        return;
+    }
+
+    const farmer = document.getElementById('farmer_id');
+    const date = document.getElementById('entry_date');
+    const item = document.getElementById('item_id');
+    const qty = document.getElementById('quantity');
+
+    const farmerError = document.getElementById('farmer-error');
+    const dateError = document.getElementById('date-error');
+    const itemError = document.getElementById('item-error');
+    const qtyError = document.getElementById('quantity-error');
 
     function checkFarmer() {
-        if (farmer.value == '0' || farmer.value === '') {
+        if (farmer.value === '0') {
             farmerError.textContent = 'Please select a farmer.';
             return false;
         }
+
         farmerError.textContent = '';
         return true;
     }
@@ -37,15 +32,14 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-        var today = new Date();
+        const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        var selected = new Date(date.value);
-        selected.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(date.value);
+        selectedDate.setHours(0, 0, 0, 0);
 
-        if (selected > today) {
+        if (selectedDate > today) {
             dateError.textContent = 'Date cannot be in the future.';
-            date.value = '';
             return false;
         }
 
@@ -54,60 +48,47 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function checkItem() {
-        if (item.value == '0' || item.value === '') {
+        if (item.value === '0') {
             itemError.textContent = 'Please select an item.';
             return false;
         }
+
         itemError.textContent = '';
         return true;
     }
 
     function checkQuantity() {
-        var val = parseFloat(quantity.value);
-        if (isNaN(val) || val <= 0) {
-            quantityError.textContent = 'Quantity must be greater than 0.';
-            quantity.value = '';
+        const value = parseFloat(qty.value);
+
+        if (isNaN(value) || value <= 0) {
+            qtyError.textContent = 'Quantity must be greater than 0.';
             return false;
         }
-        quantityError.textContent = '';
+
+        qtyError.textContent = '';
         return true;
     }
 
-    // Attach events
     farmer.addEventListener('change', checkFarmer);
-    farmer.addEventListener('blur', checkFarmer);
-
-    date.addEventListener('change', checkDate);
     date.addEventListener('blur', checkDate);
-
     item.addEventListener('change', checkItem);
-    item.addEventListener('blur', checkItem);
+    qty.addEventListener('blur', checkQuantity);
 
-    quantity.addEventListener('blur', checkQuantity);
-    quantity.addEventListener('input', function () {
-        if (this.value !== '') {
-            checkQuantity();
+    form.addEventListener('submit', function (event) {
+
+        const validFarmer = checkFarmer();
+        const validDate = checkDate();
+        const validItem = checkItem();
+        const validQuantity = checkQuantity();
+
+        if (
+            !validFarmer ||
+            !validDate ||
+            !validItem ||
+            !validQuantity
+        ) {
+            event.preventDefault();
         }
-    });
-
-    // Submit handler
-    form.addEventListener('submit', function (e) {
-        var okFarmer = checkFarmer();
-        var okDate = checkDate();
-        var okItem = checkItem();
-        var okQty = checkQuantity();
-
-        if (!okFarmer || !okDate || !okItem || !okQty) {
-            e.preventDefault();
-
-            if (!okFarmer) farmer.focus();
-            else if (!okDate) date.focus();
-            else if (!okItem) item.focus();
-            else if (!okQty) quantity.focus();
-
-            return false;
-        }
-        return true;
     });
 
 });

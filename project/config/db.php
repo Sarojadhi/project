@@ -1,14 +1,9 @@
 <?php
-$host = "localhost";
-$user = "root";
-$pass = "";
-$dbname = "dairy_management";
 
-$conn = new mysqli($host, $user, $pass, $dbname);
+$conn = new mysqli('localhost', 'root', '', 'dairy_management');
 
 if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+    die('Database connection failed: ' . $conn->connect_error);
 }
 
-$conn->set_charset("utf8mb4");
-?>
+$conn->set_charset('utf8mb4');

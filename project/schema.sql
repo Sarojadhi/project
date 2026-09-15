@@ -1,81 +1,113 @@
 CREATE DATABASE IF NOT EXISTS dairy_management;
+
 USE dairy_management;
 
-CREATE TABLE IF NOT EXISTS users (
+
+-- Users: admin, staff and farmers
+CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
+    username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin','staff','farmer') NOT NULL,
+    role ENUM('admin', 'staff', 'farmer') NOT NULL,
     full_name VARCHAR(100) NOT NULL,
-    phone VARCHAR(20) DEFAULT '',
-    status ENUM('active','inactive') DEFAULT 'active',
+    phone VARCHAR(15),
+    status ENUM('active', 'inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS staff (
+
+-- Farmers
+CREATE TABLE farmers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    address VARCHAR(150) DEFAULT '',
-    join_date DATE DEFAULT NULL,
-    status ENUM('active','inactive') DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    address VARCHAR(255),
+    join_date DATE,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS farmers (
+
+-- Staff
+CREATE TABLE staff (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    address VARCHAR(150) DEFAULT '',
-    join_date DATE DEFAULT NULL,
-    status ENUM('active','inactive') DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    address VARCHAR(255),
+    join_date DATE,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS milk_entries (
+
+-- Milk rate chart
+CREATE TABLE rate_chart (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    fat_value DECIMAL(4,1) NOT NULL,
+    snf_value DECIMAL(4,1) NOT NULL,
+    rate_per_litre DECIMAL(8,2) NOT NULL,
+    effective_from DATE
+);
+
+
+-- Dana/feed prices
+CREATE TABLE dana_price (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    item_name VARCHAR(100) NOT NULL,
+    price_per_unit DECIMAL(8,2) NOT NULL,
+    effective_from DATE
+);
+
+
+-- Milk collection entries
+CREATE TABLE milk_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     farmer_id INT NOT NULL,
     entry_date DATE NOT NULL,
-    shift ENUM('morning','evening') NOT NULL,
-    litre DECIMAL(6,2) NOT NULL,
-    fat DECIMAL(4,2) NOT NULL,
-    snf DECIMAL(4,2) NOT NULL,
-    rate_applied DECIMAL(6,2) DEFAULT 0,
-    amount DECIMAL(9,2) DEFAULT 0,
-    entered_by INT NOT NULL,
+    shift ENUM('morning', 'evening') NOT NULL,
+    litre DECIMAL(8,2) NOT NULL,
+    fat DECIMAL(4,1) NOT NULL,
+    snf DECIMAL(4,1) NOT NULL,
+    rate_applied DECIMAL(8,2),
+    amount DECIMAL(10,2),
+    entered_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
+
+    FOREIGN KEY (farmer_id)
+        REFERENCES farmers(id),
+
+    FOREIGN KEY (entered_by)
+        REFERENCES users(id),
+
+    UNIQUE KEY unique_milk (farmer_id, entry_date, shift)
 );
 
-CREATE TABLE IF NOT EXISTS dana_entries (
+
+-- Dana/feed entries
+CREATE TABLE dana_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     farmer_id INT NOT NULL,
     entry_date DATE NOT NULL,
     item_name VARCHAR(100) NOT NULL,
-    quantity DECIMAL(6,2) NOT NULL,
-    price_applied DECIMAL(6,2) NOT NULL,
-    amount DECIMAL(9,2) NOT NULL,
-    entered_by INT NOT NULL,
+    quantity DECIMAL(8,2) NOT NULL,
+    price_applied DECIMAL(8,2),
+    amount DECIMAL(10,2),
+    entered_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
+
+    FOREIGN KEY (farmer_id)
+        REFERENCES farmers(id),
+
+    FOREIGN KEY (entered_by)
+        REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS dana_price (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_name VARCHAR(100) NOT NULL,
-    price_per_unit DECIMAL(6,2) NOT NULL,
-    effective_from DATE DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
-CREATE TABLE IF NOT EXISTS rate_chart (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    fat_value DECIMAL(4,2) NOT NULL,
-    snf_value DECIMAL(4,2) NOT NULL,
-    rate_per_litre DECIMAL(6,2) NOT NULL,
-    effective_from DATE DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT IGNORE INTO users (username, password, role, full_name, phone, status)
-VALUES ('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'Administrator', '', 'active');
+-- Default dana prices
+INSERT INTO dana_price
+    (item_name, price_per_unit, effective_from)
+VALUES
+    ('Cow Feed', 45.00, CURDATE()),
+    ('Buffalo Feed', 50.00, CURDATE());

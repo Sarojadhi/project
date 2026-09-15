@@ -1,23 +1,11 @@
 <?php
-session_start();
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/includes/auth.php';
 
-if ($_SESSION['role'] === 'admin') {
-    header('Location: admin/dashboard.php');
-    exit;
-} elseif ($_SESSION['role'] === 'staff') {
-    header('Location: staff/dashboard.php');
-    exit;
-} elseif ($_SESSION['role'] === 'farmer') {
-    header('Location: farmer/dashboard.php');
-    exit;
-} else {
+if (isset($_SESSION['user_id'])) {
+    session_unset();
     session_destroy();
-    header('Location: login.php');
-    exit;
 }
-?>
+
+header('Location: ' . BASE_URL . '/login.php');
+exit;
