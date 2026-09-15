@@ -1,4 +1,3 @@
-
 document.addEventListener('DOMContentLoaded', function () {
 
     const form = document.getElementById('loginForm');
@@ -7,6 +6,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const usernameError = document.getElementById('username-error');
     const passwordError = document.getElementById('password-error');
+
+    const togglePassword = document.getElementById('togglePassword');
 
     // Stop if the required elements are missing
     if (
@@ -19,9 +20,30 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
+
+    // Password show/hide button
+    if (togglePassword) {
+
+        togglePassword.addEventListener('click', function () {
+
+            if (password.type === 'password') {
+                password.type = 'text';
+                togglePassword.textContent = '🙈';
+            } else {
+                password.type = 'password';
+                togglePassword.textContent = '👁';
+            }
+
+        });
+
+    }
+
+
     const usernameRegex = /^[A-Za-z][A-Za-z0-9_]{2,}$/;
 
+
     function checkUsername() {
+
         const value = username.value.trim();
 
         if (value === '') {
@@ -39,7 +61,9 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
+
     function checkPassword() {
+
         const value = password.value;
 
         if (value === '') {
@@ -51,22 +75,30 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
+
     // Check when user leaves the field
     username.addEventListener('blur', checkUsername);
     password.addEventListener('blur', checkPassword);
 
-    // Check again while fixing an error
+
+    // Check while fixing an error
     username.addEventListener('input', function () {
+
         if (usernameError.textContent !== '') {
             checkUsername();
         }
+
     });
 
+
     password.addEventListener('input', function () {
+
         if (passwordError.textContent !== '') {
             checkPassword();
         }
+
     });
+
 
     // Final validation before submitting
     form.addEventListener('submit', function (event) {
@@ -75,6 +107,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const validPassword = checkPassword();
 
         if (!validUsername || !validPassword) {
+
             event.preventDefault();
 
             if (!validUsername) {
@@ -82,7 +115,10 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 password.focus();
             }
+
         }
+
     });
 
 });
+

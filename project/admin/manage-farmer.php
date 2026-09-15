@@ -9,174 +9,292 @@ requireAdminOrStaff();
 $message = '';
 $messageType = '';
 
-/*
-|--------------------------------------------------------------------------
-| Add Farmer
-|--------------------------------------------------------------------------
-*/
+// Add or edit farmer
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     $action = $_POST['action'];
 
+    // Add farmer
+
     if ($action === 'add') {
 
-        $username = trim($_POST['username']);
-        $password = $_POST['password'];
-        $fullName = trim($_POST['full_name']);
-        $phone = trim($_POST['phone']);
-        $address = trim($_POST['address']);
-        $joinDate = $_POST['join_date'];
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $fullName = trim($_POST['full_name'] ?? '');
 
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        $phonePrefix = $_POST['phone_prefix'] ?? '';
+        $phoneNumber = $_POST['phone_number'] ?? '';
 
-        $stmt = $conn->prepare(
-            "INSERT INTO users
-            (username, password, role, full_name, phone, status)
-            VALUES (?, ?, 'farmer', ?, ?, 'active')"
-        );
+        $address = trim($_POST['address'] ?? '');
+        $joinDate = $_POST['join_date'] ?? '';
 
-        $stmt->bind_param(
-            'ssss',
-            $username,
-            $hashedPassword,
-            $fullName,
-            $phone
-        );
+        // Server-side validation
 
-        if ($stmt->execute()) {
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{2,19}$/', $username)) {
 
-            $userId = $conn->insert_id;
+            $message = 'Username must start with a letter and contain 3 to 20 characters.';
+            $messageType = 'error';
 
-            $stmt->close();
+        } elseif (
+            !preg_match(
+                '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/',
+                $password
+            )
+        ) {
+
+            $message = 'Password must be at least 8 characters with uppercase, lowercase, number and symbol.';
+            $messageType = 'error';
+
+        } elseif (
+            strlen($fullName) < 2 ||
+            !preg_match('/^[A-Za-z ]+$/', $fullName)
+        ) {
+
+            $message = 'Full name must contain letters and spaces only.';
+            $messageType = 'error';
+
+        } elseif (
+            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
+            !preg_match('/^\d{8}$/', $phoneNumber)
+        ) {
+
+            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $messageType = 'error';
+
+        } elseif (
+            strlen($address) < 3 ||
+            strlen($address) > 200 ||
+            !preg_match('/^[A-Za-z ]+$/', $address)
+        ) {
+
+            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
+            $messageType = 'error';
+
+        } elseif ($joinDate !== date('Y-m-d')) {
+
+            $message = 'Join date must be today.';
+            $messageType = 'error';
+
+        } else {
+
+            $phone = $phonePrefix . $phoneNumber;
+
+            $hashedPassword = password_hash(
+                $password,
+                PASSWORD_DEFAULT
+            );
+
+            // Insert user
 
             $stmt = $conn->prepare(
-                "INSERT INTO farmers
-                (user_id, address, join_date, status)
-                VALUES (?, ?, ?, 'active')"
+                "INSERT INTO users
+                (username, password, role, full_name, phone, status)
+                VALUES (?, ?, 'farmer', ?, ?, 'active')"
             );
 
             $stmt->bind_param(
-                'iss',
-                $userId,
-                $address,
-                $joinDate
+                'ssss',
+                $username,
+                $hashedPassword,
+                $fullName,
+                $phone
             );
 
             if ($stmt->execute()) {
 
-                $message = 'Farmer added successfully.';
-                $messageType = 'success';
+                $userId = $conn->insert_id;
+
+                $stmt->close();
+
+                // Insert farmer profile
+
+                $stmt = $conn->prepare(
+                    "INSERT INTO farmers
+                    (user_id, address, join_date, status)
+                    VALUES (?, ?, ?, 'active')"
+                );
+
+                $stmt->bind_param(
+                    'iss',
+                    $userId,
+                    $address,
+                    $joinDate
+                );
+
+                if ($stmt->execute()) {
+
+                    $message = 'Farmer added successfully.';
+                    $messageType = 'success';
+
+                } else {
+
+                    $deleteStmt = $conn->prepare(
+                        "DELETE FROM users WHERE id = ?"
+                    );
+
+                    $deleteStmt->bind_param(
+                        'i',
+                        $userId
+                    );
+
+                    $deleteStmt->execute();
+                    $deleteStmt->close();
+
+                    $message = 'Failed to add farmer details.';
+                    $messageType = 'error';
+                }
+
+                $stmt->close();
 
             } else {
 
-                $conn->query("DELETE FROM users WHERE id = $userId");
+                if ($stmt->errno === 1062) {
+                    $message = 'Username already exists.';
+                } else {
+                    $message = 'Failed to create farmer.';
+                }
 
-                $message = 'Failed to add farmer details.';
                 $messageType = 'error';
+
+                $stmt->close();
             }
-
-            $stmt->close();
-
-        } else {
-
-            if ($conn->errno == 1062) {
-                $message = 'Username already exists.';
-            } else {
-                $message = 'Failed to create farmer.';
-            }
-
-            $messageType = 'error';
-
-            $stmt->close();
         }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Edit Farmer
-    |--------------------------------------------------------------------------
-    */
+    // Edit farmer
 
     if ($action === 'edit') {
 
-        $farmerId = (int) $_POST['farmer_id'];
+        $farmerId = (int) ($_POST['farmer_id'] ?? 0);
 
-        $fullName = trim($_POST['full_name']);
-        $phone = trim($_POST['phone']);
-        $address = trim($_POST['address']);
-        $joinDate = $_POST['join_date'];
+        $fullName = trim($_POST['full_name'] ?? '');
 
-        $stmt = $conn->prepare(
-            "SELECT user_id
-             FROM farmers
-             WHERE id = ?"
-        );
+        $phonePrefix = $_POST['phone_prefix'] ?? '';
+        $phoneNumber = $_POST['phone_number'] ?? '';
 
-        $stmt->bind_param('i', $farmerId);
-        $stmt->execute();
+        $address = trim($_POST['address'] ?? '');
+        $joinDate = $_POST['join_date'] ?? '';
 
-        $result = $stmt->get_result();
-        $farmer = $result->fetch_assoc();
+        // Server-side validation
 
-        $stmt->close();
+        if (
+            strlen($fullName) < 2 ||
+            !preg_match('/^[A-Za-z ]+$/', $fullName)
+        ) {
 
-        if ($farmer) {
+            $message = 'Full name must contain letters and spaces only.';
+            $messageType = 'error';
 
-            $userId = $farmer['user_id'];
+        } elseif (
+            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
+            !preg_match('/^\d{8}$/', $phoneNumber)
+        ) {
 
-            $stmt = $conn->prepare(
-                "UPDATE users
-                 SET full_name = ?, phone = ?
-                 WHERE id = ?"
-            );
+            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $messageType = 'error';
 
-            $stmt->bind_param(
-                'ssi',
-                $fullName,
-                $phone,
-                $userId
-            );
+        } elseif (
+            strlen($address) < 3 ||
+            strlen($address) > 200 ||
+            !preg_match('/^[A-Za-z ]+$/', $address)
+        ) {
 
-            $stmt->execute();
-            $stmt->close();
+            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
+            $messageType = 'error';
 
-            $stmt = $conn->prepare(
-                "UPDATE farmers
-                 SET address = ?, join_date = ?
-                 WHERE id = ?"
-            );
+        } elseif ($joinDate !== date('Y-m-d')) {
 
-            $stmt->bind_param(
-                'ssi',
-                $address,
-                $joinDate,
-                $farmerId
-            );
-
-            if ($stmt->execute()) {
-                $message = 'Farmer updated successfully.';
-                $messageType = 'success';
-            } else {
-                $message = 'Failed to update farmer.';
-                $messageType = 'error';
-            }
-
-            $stmt->close();
+            $message = 'Join date must be today.';
+            $messageType = 'error';
 
         } else {
 
-            $message = 'Farmer not found.';
-            $messageType = 'error';
+            $phone = $phonePrefix . $phoneNumber;
+
+            // Find farmer
+
+            $stmt = $conn->prepare(
+                "SELECT user_id
+                 FROM farmers
+                 WHERE id = ?"
+            );
+
+            $stmt->bind_param(
+                'i',
+                $farmerId
+            );
+
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $farmer = $result->fetch_assoc();
+
+            $stmt->close();
+
+            if ($farmer) {
+
+                $userId = (int) $farmer['user_id'];
+
+                // Update user
+
+                $stmt = $conn->prepare(
+                    "UPDATE users
+                     SET full_name = ?, phone = ?
+                     WHERE id = ?"
+                );
+
+                $stmt->bind_param(
+                    'ssi',
+                    $fullName,
+                    $phone,
+                    $userId
+                );
+
+                $userUpdated = $stmt->execute();
+
+                $stmt->close();
+
+                // Update farmer
+
+                $stmt = $conn->prepare(
+                    "UPDATE farmers
+                     SET address = ?, join_date = ?
+                     WHERE id = ?"
+                );
+
+                $stmt->bind_param(
+                    'ssi',
+                    $address,
+                    $joinDate,
+                    $farmerId
+                );
+
+                $farmerUpdated = $stmt->execute();
+
+                $stmt->close();
+
+                if ($userUpdated && $farmerUpdated) {
+
+                    $message = 'Farmer updated successfully.';
+                    $messageType = 'success';
+
+                } else {
+
+                    $message = 'Failed to update farmer.';
+                    $messageType = 'error';
+                }
+
+            } else {
+
+                $message = 'Farmer not found.';
+                $messageType = 'error';
+            }
         }
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Activate / Deactivate Farmer
-|--------------------------------------------------------------------------
-*/
+// Activate or deactivate farmer
 
 if (isset($_GET['toggle'])) {
 
@@ -188,7 +306,11 @@ if (isset($_GET['toggle'])) {
          WHERE id = ?"
     );
 
-    $stmt->bind_param('i', $farmerId);
+    $stmt->bind_param(
+        'i',
+        $farmerId
+    );
+
     $stmt->execute();
 
     $result = $stmt->get_result();
@@ -204,6 +326,8 @@ if (isset($_GET['toggle'])) {
             $newStatus = 'active';
         }
 
+        // Update farmer status
+
         $stmt = $conn->prepare(
             "UPDATE farmers
              SET status = ?
@@ -218,6 +342,8 @@ if (isset($_GET['toggle'])) {
 
         $stmt->execute();
         $stmt->close();
+
+        // Update user status
 
         $stmt = $conn->prepare(
             "UPDATE users
@@ -235,15 +361,16 @@ if (isset($_GET['toggle'])) {
         $stmt->close();
     }
 
-    header('Location: ' . BASE_URL . '/admin/manage-farmer.php');
+    header(
+        'Location: ' .
+        BASE_URL .
+        '/admin/manage-farmer.php'
+    );
+
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Farmer Being Edited
-|--------------------------------------------------------------------------
-*/
+// Get farmer being edited
 
 $editFarmer = null;
 
@@ -256,6 +383,7 @@ if (isset($_GET['edit'])) {
             f.id,
             f.address,
             f.join_date,
+            u.username,
             u.full_name,
             u.phone
          FROM farmers f
@@ -263,7 +391,11 @@ if (isset($_GET['edit'])) {
          WHERE f.id = ?"
     );
 
-    $stmt->bind_param('i', $editId);
+    $stmt->bind_param(
+        'i',
+        $editId
+    );
+
     $stmt->execute();
 
     $result = $stmt->get_result();
@@ -272,11 +404,28 @@ if (isset($_GET['edit'])) {
     $stmt->close();
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get All Farmers
-|--------------------------------------------------------------------------
-*/
+// Prepare phone values for edit
+
+$editPhonePrefix = '';
+$editPhoneNumber = '';
+
+if ($editFarmer && !empty($editFarmer['phone'])) {
+
+    $editPhone = $editFarmer['phone'];
+
+    if (substr($editPhone, 0, 2) === '97') {
+
+        $editPhonePrefix = '97';
+        $editPhoneNumber = substr($editPhone, 2);
+
+    } elseif (substr($editPhone, 0, 2) === '98') {
+
+        $editPhonePrefix = '98';
+        $editPhoneNumber = substr($editPhone, 2);
+    }
+}
+
+// Get all farmers
 
 $sql = "SELECT
             f.id,
@@ -302,17 +451,19 @@ include __DIR__ . '/../includes/header.php';
 
     <?php if ($message !== ''): ?>
 
-        <div class="mb-6 p-3 rounded-md
-            <?php echo $messageType === 'success'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'; ?>">
-
-            <?php echo htmlspecialchars($message); ?>
-
+        <div
+            id="message"
+            class="mb-6 p-3 rounded-md
+                <?php
+                echo $messageType === 'success'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-700';
+                ?>"
+        >
+            <?php echo e($message); ?>
         </div>
 
     <?php endif; ?>
-
 
     <!-- Add / Edit Farmer -->
 
@@ -328,30 +479,43 @@ include __DIR__ . '/../includes/header.php';
 
         </h2>
 
-        <form method="POST" id="userForm">
+        <form
+            method="POST"
+            id="userForm"
+        >
 
             <?php if ($editFarmer): ?>
 
-                <input type="hidden" name="action" value="edit">
+                <input
+                    type="hidden"
+                    name="action"
+                    value="edit"
+                >
 
                 <input
                     type="hidden"
                     name="farmer_id"
-                    value="<?php echo $editFarmer['id']; ?>"
+                    value="<?php echo (int) $editFarmer['id']; ?>"
                 >
 
             <?php else: ?>
 
-                <input type="hidden" name="action" value="add">
+                <input
+                    type="hidden"
+                    name="action"
+                    value="add"
+                >
 
             <?php endif; ?>
 
-
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <!-- Username -->
 
                 <?php if (!$editFarmer): ?>
 
                     <div>
+
                         <label
                             for="username"
                             class="block text-sm font-medium text-gray-700 mb-1"
@@ -363,17 +527,21 @@ include __DIR__ . '/../includes/header.php';
                             type="text"
                             id="username"
                             name="username"
-                            class="w-full border border-gray-300 rounded-md px-3 py-2"
+                            placeholder="Enter username"
+                            class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                         >
 
                         <span
                             id="username-error"
                             class="text-sm text-red-600"
                         ></span>
+
                     </div>
 
+                    <!-- Password -->
 
                     <div>
+
                         <label
                             for="password"
                             class="block text-sm font-medium text-gray-700 mb-1"
@@ -381,23 +549,39 @@ include __DIR__ . '/../includes/header.php';
                             Password
                         </label>
 
-                        <input
-                            type="password"
-                            id="password"
-                            name="password"
-                            class="w-full border border-gray-300 rounded-md px-3 py-2"
-                        >
+                        <div class="relative">
+
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                placeholder="Enter password"
+                                class="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:outline-none focus:border-blue-500"
+                            >
+
+                            <button
+                                type="button"
+                                id="togglePassword"
+                                class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                            >
+                                👁
+                            </button>
+
+                        </div>
 
                         <span
                             id="password-error"
                             class="text-sm text-red-600"
                         ></span>
+
                     </div>
 
                 <?php endif; ?>
 
+                <!-- Full Name -->
 
                 <div>
+
                     <label
                         for="full_name"
                         class="block text-sm font-medium text-gray-700 mb-1"
@@ -411,47 +595,99 @@ include __DIR__ . '/../includes/header.php';
                         name="full_name"
                         value="<?php
                             echo $editFarmer
-                                ? htmlspecialchars($editFarmer['full_name'])
+                                ? e($editFarmer['full_name'])
                                 : '';
                         ?>"
-                        class="w-full border border-gray-300 rounded-md px-3 py-2"
+                        placeholder="Enter full name"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
 
                     <span
-                        id="full_name-error"
+                        id="full-name-error"
                         class="text-sm text-red-600"
                     ></span>
+
                 </div>
 
+                <!-- Phone -->
 
                 <div>
+
                     <label
-                        for="phone"
                         class="block text-sm font-medium text-gray-700 mb-1"
                     >
                         Phone
                     </label>
 
+                    <div class="flex gap-2">
+
+                        <select
+                            id="phone_prefix"
+                            name="phone_prefix"
+                            class="w-20 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                        >
+
+                      
+                            <option
+                                value="98"
+                                <?php
+                                echo $editPhonePrefix === '98'
+                                    ? 'selected'
+                                    : '';
+                                ?>
+                            >
+                                98
+                            </option>
+
+                            <option
+                                value="97"
+                                <?php
+                                echo $editPhonePrefix === '97'
+                                    ? 'selected'
+                                    : '';
+                                ?>
+                            >
+                                97
+                            </option>
+
+                        </select>
+
+                        <input
+                            type="text"
+                            id="phone_number"
+                            name="phone_number"
+                            value="<?php echo e($editPhoneNumber); ?>"
+                            maxlength="8"
+                            inputmode="numeric"
+                            autocomplete="tel"
+                            placeholder="12345678"
+                            class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                        >
+
+                    </div>
+
                     <input
-                        type="text"
+                        type="hidden"
                         id="phone"
                         name="phone"
                         value="<?php
                             echo $editFarmer
-                                ? htmlspecialchars($editFarmer['phone'])
+                                ? e($editFarmer['phone'])
                                 : '';
                         ?>"
-                        class="w-full border border-gray-300 rounded-md px-3 py-2"
                     >
 
                     <span
                         id="phone-error"
                         class="text-sm text-red-600"
                     ></span>
+
                 </div>
 
+                <!-- Address -->
 
                 <div>
+
                     <label
                         for="address"
                         class="block text-sm font-medium text-gray-700 mb-1"
@@ -465,20 +701,26 @@ include __DIR__ . '/../includes/header.php';
                         name="address"
                         value="<?php
                             echo $editFarmer
-                                ? htmlspecialchars($editFarmer['address'])
+                                ? e($editFarmer['address'])
                                 : '';
                         ?>"
-                        class="w-full border border-gray-300 rounded-md px-3 py-2"
+                        minlength="3"
+                        maxlength="200"
+                        placeholder="Enter address"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
 
                     <span
                         id="address-error"
                         class="text-sm text-red-600"
                     ></span>
+
                 </div>
 
+                <!-- Join Date -->
 
                 <div>
+
                     <label
                         for="join_date"
                         class="block text-sm font-medium text-gray-700 mb-1"
@@ -492,20 +734,24 @@ include __DIR__ . '/../includes/header.php';
                         name="join_date"
                         value="<?php
                             echo $editFarmer
-                                ? $editFarmer['join_date']
+                                ? e($editFarmer['join_date'])
                                 : date('Y-m-d');
                         ?>"
-                        class="w-full border border-gray-300 rounded-md px-3 py-2"
+                        min="<?php echo date('Y-m-d'); ?>"
+                        max="<?php echo date('Y-m-d'); ?>"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
 
                     <span
-                        id="join_date-error"
+                        id="join-date-error"
                         class="text-sm text-red-600"
                     ></span>
+
                 </div>
 
             </div>
 
+            <!-- Buttons -->
 
             <div class="mt-5 flex gap-2">
 
@@ -519,7 +765,6 @@ include __DIR__ . '/../includes/header.php';
                         : 'Add Farmer';
                     ?>
                 </button>
-
 
                 <?php if ($editFarmer): ?>
 
@@ -538,7 +783,6 @@ include __DIR__ . '/../includes/header.php';
 
     </div>
 
-
     <!-- Farmer List -->
 
     <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -550,7 +794,6 @@ include __DIR__ . '/../includes/header.php';
             </h2>
 
         </div>
-
 
         <?php if ($farmerList->num_rows === 0): ?>
 
@@ -596,7 +839,6 @@ include __DIR__ . '/../includes/header.php';
 
                     </thead>
 
-
                     <tbody class="divide-y divide-gray-200">
 
                         <?php while ($row = $farmerList->fetch_assoc()): ?>
@@ -604,19 +846,19 @@ include __DIR__ . '/../includes/header.php';
                             <tr class="hover:bg-gray-50">
 
                                 <td class="px-4 py-3 text-sm">
-                                    <?php echo $row['id']; ?>
+                                    <?php echo (int) $row['id']; ?>
                                 </td>
 
                                 <td class="px-4 py-3 text-sm">
-                                    <?php echo htmlspecialchars($row['username']); ?>
+                                    <?php echo e($row['username']); ?>
                                 </td>
 
                                 <td class="px-4 py-3 text-sm font-medium">
-                                    <?php echo htmlspecialchars($row['full_name']); ?>
+                                    <?php echo e($row['full_name']); ?>
                                 </td>
 
                                 <td class="px-4 py-3 text-sm">
-                                    <?php echo htmlspecialchars($row['phone']); ?>
+                                    <?php echo e($row['phone']); ?>
                                 </td>
 
                                 <td class="px-4 py-3 text-sm">
@@ -642,21 +884,14 @@ include __DIR__ . '/../includes/header.php';
                                     <div class="flex gap-3">
 
                                         <a
-                                            href="<?php echo BASE_URL; ?>/admin/manage-farmer.php?edit=<?php echo $row['id']; ?>"
+                                            href="<?php echo BASE_URL; ?>/admin/manage-farmer.php?edit=<?php echo (int) $row['id']; ?>"
                                             class="text-blue-600 hover:underline"
                                         >
                                             Edit
                                         </a>
 
                                         <a
-                                            href="<?php echo BASE_URL; ?>/admin/report.php?search=<?php echo $row['id']; ?>"
-                                            class="text-purple-600 hover:underline"
-                                        >
-                                            Ledger
-                                        </a>
-
-                                        <a
-                                            href="<?php echo BASE_URL; ?>/admin/manage-farmer.php?toggle=<?php echo $row['id']; ?>"
+                                            href="<?php echo BASE_URL; ?>/admin/manage-farmer.php?toggle=<?php echo (int) $row['id']; ?>"
                                             class="<?php
                                                 echo $row['status'] === 'active'
                                                     ? 'text-red-600'
@@ -690,7 +925,6 @@ include __DIR__ . '/../includes/header.php';
     </div>
 
 </div>
-
 
 <script src="<?php echo BASE_URL; ?>/assets/js/validate-user-form.js"></script>
 

@@ -9,27 +9,70 @@ document.addEventListener('DOMContentLoaded', function () {
     const username = document.getElementById('username');
     const password = document.getElementById('password');
     const fullName = document.getElementById('full_name');
-    const phoneSuffix = document.getElementById('phone_suffix');
+    const phonePrefix = document.getElementById('phone_prefix');
+    const phoneNumber = document.getElementById('phone_number');
+    const phone = document.getElementById('phone');
     const address = document.getElementById('address');
     const joinDate = document.getElementById('join_date');
-    const phoneHidden = document.getElementById('phone');
 
     const usernameError = document.getElementById('username-error');
     const passwordError = document.getElementById('password-error');
-    const fullNameError = document.getElementById('full_name-error');
+    const fullNameError = document.getElementById('full-name-error');
     const phoneError = document.getElementById('phone-error');
     const addressError = document.getElementById('address-error');
-    const joinDateError = document.getElementById('join_date-error');
+    const joinDateError = document.getElementById('join-date-error');
 
-    const usernameRegex = /^[A-Za-z][A-Za-z0-9_]{2,19}$/;
+    // Password eye button
 
-    const passwordRegex =
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/;
+    const togglePassword = document.getElementById('togglePassword');
 
-    const fullNameRegex = /^[A-Za-z\s]{2,50}$/;
+    if (togglePassword && password) {
 
-    const phoneSuffixRegex = /^[0-9]{8}$/;
+        togglePassword.style.display = 'none';
 
+        password.addEventListener('input', function () {
+
+            if (password.value.length > 0) {
+                togglePassword.style.display = 'block';
+            } else {
+                togglePassword.style.display = 'none';
+                password.type = 'password';
+                togglePassword.textContent = '👁';
+            }
+
+        });
+
+        togglePassword.addEventListener('click', function () {
+
+            if (password.type === 'password') {
+
+                password.type = 'text';
+                togglePassword.textContent = '🙈';
+
+            } else {
+
+                password.type = 'password';
+                togglePassword.textContent = '👁';
+
+            }
+
+        });
+
+    }
+
+    // Hide success message after 3 seconds
+
+    const message = document.getElementById('message');
+
+    if (message) {
+
+        setTimeout(function () {
+            message.remove();
+        }, 3000);
+
+    }
+
+    // Check username
 
     function checkUsername() {
 
@@ -39,21 +82,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const value = username.value.trim();
 
+        const usernameRegex =
+            /^[A-Za-z][A-Za-z0-9_]{2,19}$/;
+
         if (value === '') {
-            usernameError.textContent = 'Username is required.';
+
+            usernameError.textContent =
+                'Please enter a username.';
+
             return false;
         }
 
         if (!usernameRegex.test(value)) {
+
             usernameError.textContent =
-                'Username must start with a letter and be 3-20 characters.';
+                'Username must start with a letter and contain 3 to 20 characters.';
+
             return false;
         }
 
         usernameError.textContent = '';
+
         return true;
     }
 
+    // Check password
 
     function checkPassword() {
 
@@ -63,162 +116,232 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const value = password.value;
 
-        // Password is optional when editing an existing user
-        const editUser =
-            document.querySelector(
-                'input[name="staff_id"], input[name="farmer_id"]'
-            );
-
-        if (editUser && value === '') {
-            passwordError.textContent = '';
-            return true;
-        }
+        const passwordRegex =
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/;
 
         if (value === '') {
-            passwordError.textContent = 'Password is required.';
+
+            passwordError.textContent =
+                'Please enter a password.';
+
             return false;
         }
 
         if (!passwordRegex.test(value)) {
+
             passwordError.textContent =
-                'Password must be 8+ characters with uppercase, lowercase, number and special character.';
+                'Password must be at least 8 characters with uppercase, lowercase, number and symbol.';
+
             return false;
         }
 
         passwordError.textContent = '';
+
         return true;
     }
 
+    // Check full name
 
     function checkFullName() {
 
-        if (!fullName) {
-            return true;
-        }
-
         const value = fullName.value.trim();
 
+        const nameRegex = /^[A-Za-z ]+$/;
+
         if (value === '') {
-            fullNameError.textContent = 'Full name is required.';
+
+            fullNameError.textContent =
+                'Please enter full name.';
+
             return false;
         }
 
-        if (!fullNameRegex.test(value)) {
+        if (value.length < 2) {
+
             fullNameError.textContent =
-                'Full name must contain 2-50 letters and spaces only.';
+                'Full name must be at least 2 characters.';
+
+            return false;
+        }
+
+        if (!nameRegex.test(value)) {
+
+            fullNameError.textContent =
+                'Full name can contain letters and spaces only.';
+
             return false;
         }
 
         fullNameError.textContent = '';
+
         return true;
     }
 
+    // Check phone
 
     function checkPhone() {
 
-        if (!phoneSuffix) {
-            return true;
-        }
+        const prefix = phonePrefix.value;
+        const number = phoneNumber.value;
 
-        const value = phoneSuffix.value.trim();
+        if (prefix !== '97' && prefix !== '98') {
 
-        if (value === '') {
-            phoneError.textContent = 'Phone is required.';
-            return false;
-        }
-
-        if (!phoneSuffixRegex.test(value)) {
             phoneError.textContent =
-                'Phone must contain exactly 8 digits after the prefix.';
+                'Please select 97 or 98.';
+
             return false;
         }
+
+        if (number === '') {
+
+            phoneError.textContent =
+                'Please enter the remaining 8 digits.';
+
+            return false;
+        }
+
+        if (!/^\d{8}$/.test(number)) {
+
+            phoneError.textContent =
+                'Phone number must contain exactly 8 digits.';
+
+            return false;
+        }
+
+        phone.value = prefix + number;
 
         phoneError.textContent = '';
+
         return true;
     }
 
+    // Check address
 
     function checkAddress() {
 
-        if (!address) {
-            return true;
-        }
-
         const value = address.value.trim();
 
+        const addressRegex = /^[A-Za-z ]+$/;
+
         if (value === '') {
-            addressError.textContent = 'Address is required.';
+
+            addressError.textContent =
+                'Please enter an address.';
+
+            return false;
+        }
+
+        if (value.length < 3) {
+
+            addressError.textContent =
+                'Address must be at least 3 characters.';
+
             return false;
         }
 
         if (value.length > 200) {
+
             addressError.textContent =
-                'Address must not exceed 200 characters.';
+                'Address must be 200 characters or less.';
+
+            return false;
+        }
+
+        if (!addressRegex.test(value)) {
+
+            addressError.textContent =
+                'Address can contain letters and spaces only.';
+
             return false;
         }
 
         addressError.textContent = '';
+
         return true;
     }
 
+    // Check join date
 
     function checkJoinDate() {
-
-        if (!joinDate) {
-            return true;
-        }
 
         const value = joinDate.value;
 
         if (value === '') {
-            joinDateError.textContent = 'Please select a join date.';
+
+            joinDateError.textContent =
+                'Please select today\'s date.';
+
             return false;
         }
 
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
 
-        const selectedDate = new Date(value);
-        selectedDate.setHours(0, 0, 0, 0);
+        const year = today.getFullYear();
 
-        if (selectedDate > today) {
+        const month =
+            String(today.getMonth() + 1).padStart(2, '0');
+
+        const day =
+            String(today.getDate()).padStart(2, '0');
+
+        const todayDate =
+            year + '-' + month + '-' + day;
+
+        if (value !== todayDate) {
+
             joinDateError.textContent =
-                'Join date cannot be in the future.';
+                'Join date must be today.';
+
             return false;
         }
 
         joinDateError.textContent = '';
+
         return true;
     }
 
+    // Allow only 8 phone digits
 
-    // Validate when leaving each field
+    phoneNumber.addEventListener('input', function () {
+
+        phoneNumber.value =
+            phoneNumber.value
+                .replace(/\D/g, '')
+                .slice(0, 8);
+
+        checkPhone();
+    });
+
+    // Validate username
+
     if (username) {
         username.addEventListener('blur', checkUsername);
     }
+
+    // Validate password
 
     if (password) {
         password.addEventListener('blur', checkPassword);
     }
 
-    if (fullName) {
-        fullName.addEventListener('blur', checkFullName);
-    }
+    // Validate full name
 
-    if (phoneSuffix) {
-        phoneSuffix.addEventListener('blur', checkPhone);
-    }
+    fullName.addEventListener('blur', checkFullName);
 
-    if (address) {
-        address.addEventListener('blur', checkAddress);
-    }
+    // Validate phone
 
-    if (joinDate) {
-        joinDate.addEventListener('blur', checkJoinDate);
-    }
+    phonePrefix.addEventListener('change', checkPhone);
 
+    // Validate address
 
-    // Final validation before submitting
+    address.addEventListener('blur', checkAddress);
+
+    // Validate join date
+
+    joinDate.addEventListener('change', checkJoinDate);
+
+    // Validate form
+
     form.addEventListener('submit', function (event) {
 
         const validUsername = checkUsername();
@@ -228,16 +351,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const validAddress = checkAddress();
         const validJoinDate = checkJoinDate();
 
-
-        // Combine phone prefix and suffix
-        const phonePrefix = document.getElementById('phone_prefix');
-
-        if (phonePrefix && phoneSuffix && phoneHidden) {
-            phoneHidden.value =
-                phonePrefix.value + phoneSuffix.value;
-        }
-
-
         if (
             !validUsername ||
             !validPassword ||
@@ -246,22 +359,10 @@ document.addEventListener('DOMContentLoaded', function () {
             !validAddress ||
             !validJoinDate
         ) {
-            event.preventDefault();
 
-            if (!validUsername && username) {
-                username.focus();
-            } else if (!validPassword && password) {
-                password.focus();
-            } else if (!validFullName && fullName) {
-                fullName.focus();
-            } else if (!validPhone && phoneSuffix) {
-                phoneSuffix.focus();
-            } else if (!validAddress && address) {
-                address.focus();
-            } else if (!validJoinDate && joinDate) {
-                joinDate.focus();
-            }
+            event.preventDefault();
         }
+
     });
 
 });
