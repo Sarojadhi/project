@@ -1,22 +1,22 @@
 <?php
 
 require_once __DIR__ . '/../includes/auth.php';
+requireRole('admin');
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/functions.php';
-
-requireAdminOrStaff();
 
 $message = '';
 $messageType = '';
 
+
 // Add or edit staff
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'] ?? '';
 
-    $action = $_POST['action'];
 
     // Add staff
-
     if ($action === 'add') {
 
         $username = trim($_POST['username'] ?? '');
@@ -24,16 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $fullName = trim($_POST['full_name'] ?? '');
 
         $phonePrefix = $_POST['phone_prefix'] ?? '';
-        $phoneNumber = $_POST['phone_number'] ?? '';
+        $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
         $joinDate = $_POST['join_date'] ?? '';
 
-        // Server-side validation
 
-        if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{2,19}$/', $username)) {
+        // Validation
 
-            $message = 'Username must start with a letter and contain 3 to 20 characters.';
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+
+            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
             $messageType = 'error';
 
         } elseif (
@@ -64,51 +65,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200 ||
-            !preg_match('/^[A-Za-z ]+$/', $address)
+            strlen($address) > 200
         ) {
 
-            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
+            $message = 'Address must be between 3 and 200 characters.';
             $messageType = 'error';
 
         } elseif ($joinDate !== date('Y-m-d')) {
 
-            $message = 'Join date must be today.';
+            $message = 'New staff join date must be today.';
             $messageType = 'error';
 
         } else {
 
             $phone = $phonePrefix . $phoneNumber;
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-            $hashedPassword = password_hash(
-                $password,
-                PASSWORD_DEFAULT
-            );
+            $conn->begin_transaction();
 
-            // Insert user
+            try {
 
-            $stmt = $conn->prepare(
-                "INSERT INTO users
-                (username, password, role, full_name, phone, status)
-                VALUES (?, ?, 'staff', ?, ?, 'active')"
-            );
+                // Create user
+                $stmt = $conn->prepare(
+                    "INSERT INTO users
+                    (username, password, role, full_name, phone, status)
+                    VALUES (?, ?, 'staff', ?, ?, 'active')"
+                );
 
-            $stmt->bind_param(
-                'ssss',
-                $username,
-                $hashedPassword,
-                $fullName,
-                $phone
-            );
+                $stmt->bind_param(
+                    'ssss',
+                    $username,
+                    $hashedPassword,
+                    $fullName,
+                    $phone
+                );
 
-            if ($stmt->execute()) {
+                $stmt->execute();
 
                 $userId = $conn->insert_id;
 
                 $stmt->close();
 
-                // Insert staff profile
 
+                // Create staff profile
                 $stmt = $conn->prepare(
                     "INSERT INTO staff
                     (user_id, address, join_date, status)
@@ -122,63 +121,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $joinDate
                 );
 
-                if ($stmt->execute()) {
-
-                    $message = 'Staff added successfully.';
-                    $messageType = 'success';
-
-                } else {
-
-                    $deleteStmt = $conn->prepare(
-                        "DELETE FROM users WHERE id = ?"
-                    );
-
-                    $deleteStmt->bind_param(
-                        'i',
-                        $userId
-                    );
-
-                    $deleteStmt->execute();
-                    $deleteStmt->close();
-
-                    $message = 'Failed to add staff details.';
-                    $messageType = 'error';
-                }
-
+                $stmt->execute();
                 $stmt->close();
 
-            } else {
 
-                if ($stmt->errno === 1062) {
+                $conn->commit();
+
+                $message = 'Staff added successfully.';
+                $messageType = 'success';
+
+            } catch (mysqli_sql_exception $e) {
+
+                $conn->rollback();
+
+                if ($e->getCode() == 1062) {
                     $message = 'Username already exists.';
                 } else {
-                    $message = 'Failed to create staff.';
+                    $message = 'Failed to add staff.';
                 }
 
                 $messageType = 'error';
-
-                $stmt->close();
             }
         }
     }
 
-    // Edit staff
 
-    if ($action === 'edit') {
+    // Edit staff
+    elseif ($action === 'edit') {
 
         $staffId = (int) ($_POST['staff_id'] ?? 0);
 
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
         $fullName = trim($_POST['full_name'] ?? '');
 
         $phonePrefix = $_POST['phone_prefix'] ?? '';
-        $phoneNumber = $_POST['phone_number'] ?? '';
+        $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
-        $joinDate = $_POST['join_date'] ?? '';
 
-        // Server-side validation
 
-        if (
+        // Validation
+
+        if ($staffId <= 0) {
+
+            $message = 'Invalid staff.';
+            $messageType = 'error';
+
+        } elseif (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+
+            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
+            $messageType = 'error';
+
+        } elseif (
+            $password !== '' &&
+            !preg_match(
+                '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/',
+                $password
+            )
+        ) {
+
+            $message = 'New password must be at least 8 characters with uppercase, lowercase, number and symbol.';
+            $messageType = 'error';
+
+        } elseif (
             strlen($fullName) < 2 ||
             !preg_match('/^[A-Za-z ]+$/', $fullName)
         ) {
@@ -196,35 +202,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200 ||
-            !preg_match('/^[A-Za-z ]+$/', $address)
+            strlen($address) > 200
         ) {
 
-            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
-            $messageType = 'error';
-
-        } elseif ($joinDate !== date('Y-m-d')) {
-
-            $message = 'Join date must be today.';
+            $message = 'Address must be between 3 and 200 characters.';
             $messageType = 'error';
 
         } else {
 
             $phone = $phonePrefix . $phoneNumber;
 
-            // Find staff
 
+            // Get original staff record
             $stmt = $conn->prepare(
-                "SELECT user_id
+                "SELECT user_id, join_date, status
                  FROM staff
                  WHERE id = ?"
             );
 
-            $stmt->bind_param(
-                'i',
-                $staffId
-            );
-
+            $stmt->bind_param('i', $staffId);
             $stmt->execute();
 
             $result = $stmt->get_result();
@@ -232,146 +228,199 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $stmt->close();
 
-            if ($staff) {
+
+            if (!$staff) {
+
+                $message = 'Staff not found.';
+                $messageType = 'error';
+
+            } else {
 
                 $userId = (int) $staff['user_id'];
 
-                // Update user
+                $conn->begin_transaction();
 
-                $stmt = $conn->prepare(
-                    "UPDATE users
-                     SET full_name = ?, phone = ?
-                     WHERE id = ?"
-                );
+                try {
 
-                $stmt->bind_param(
-                    'ssi',
-                    $fullName,
-                    $phone,
-                    $userId
-                );
+                    // Update username, name and phone
+                    $stmt = $conn->prepare(
+                        "UPDATE users
+                         SET username = ?, full_name = ?, phone = ?
+                         WHERE id = ?"
+                    );
 
-                $userUpdated = $stmt->execute();
+                    $stmt->bind_param(
+                        'sssi',
+                        $username,
+                        $fullName,
+                        $phone,
+                        $userId
+                    );
 
-                $stmt->close();
+                    $stmt->execute();
+                    $stmt->close();
 
-                // Update staff
 
-                $stmt = $conn->prepare(
-                    "UPDATE staff
-                     SET address = ?, join_date = ?
-                     WHERE id = ?"
-                );
+                    // Change password only if admin entered a new one
+                    if ($password !== '') {
 
-                $stmt->bind_param(
-                    'ssi',
-                    $address,
-                    $joinDate,
-                    $staffId
-                );
+                        $hashedPassword = password_hash(
+                            $password,
+                            PASSWORD_DEFAULT
+                        );
 
-                $staffUpdated = $stmt->execute();
+                        $stmt = $conn->prepare(
+                            "UPDATE users
+                             SET password = ?
+                             WHERE id = ?"
+                        );
 
-                $stmt->close();
+                        $stmt->bind_param(
+                            'si',
+                            $hashedPassword,
+                            $userId
+                        );
 
-                if ($userUpdated && $staffUpdated) {
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+
+
+                    // Update staff information.
+                    // Join date is intentionally NOT updated.
+                    $stmt = $conn->prepare(
+                        "UPDATE staff
+                         SET address = ?
+                         WHERE id = ?"
+                    );
+
+                    $stmt->bind_param(
+                        'si',
+                        $address,
+                        $staffId
+                    );
+
+                    $stmt->execute();
+                    $stmt->close();
+
+
+                    $conn->commit();
 
                     $message = 'Staff updated successfully.';
                     $messageType = 'success';
 
-                } else {
+                } catch (mysqli_sql_exception $e) {
 
-                    $message = 'Failed to update staff.';
+                    $conn->rollback();
+
+                    if ($e->getCode() == 1062) {
+                        $message = 'Username already exists.';
+                    } else {
+                        $message = 'Failed to update staff.';
+                    }
+
                     $messageType = 'error';
                 }
+            }
+        }
+    }
 
-            } else {
+
+    // Change staff status
+    elseif ($action === 'status') {
+
+        $staffId = (int) ($_POST['staff_id'] ?? 0);
+        $newStatus = $_POST['status'] ?? '';
+
+
+        if (
+            $staffId <= 0 ||
+            ($newStatus !== 'active' && $newStatus !== 'inactive')
+        ) {
+
+            $message = 'Invalid status request.';
+            $messageType = 'error';
+
+        } else {
+
+            $stmt = $conn->prepare(
+                "SELECT user_id, status
+                 FROM staff
+                 WHERE id = ?"
+            );
+
+            $stmt->bind_param('i', $staffId);
+            $stmt->execute();
+
+            $result = $stmt->get_result();
+            $staff = $result->fetch_assoc();
+
+            $stmt->close();
+
+
+            if (!$staff) {
 
                 $message = 'Staff not found.';
                 $messageType = 'error';
+
+            } else {
+
+                $userId = (int) $staff['user_id'];
+
+                $conn->begin_transaction();
+
+                try {
+
+                    $stmt = $conn->prepare(
+                        "UPDATE staff
+                         SET status = ?
+                         WHERE id = ?"
+                    );
+
+                    $stmt->bind_param(
+                        'si',
+                        $newStatus,
+                        $staffId
+                    );
+
+                    $stmt->execute();
+                    $stmt->close();
+
+
+                    $stmt = $conn->prepare(
+                        "UPDATE users
+                         SET status = ?
+                         WHERE id = ?"
+                    );
+
+                    $stmt->bind_param(
+                        'si',
+                        $newStatus,
+                        $userId
+                    );
+
+                    $stmt->execute();
+                    $stmt->close();
+
+                    $conn->commit();
+
+                    $message = 'Staff status updated.';
+                    $messageType = 'success';
+
+                } catch (mysqli_sql_exception $e) {
+
+                    $conn->rollback();
+
+                    $message = 'Failed to update staff status.';
+                    $messageType = 'error';
+                }
             }
         }
     }
 }
 
-// Activate or deactivate staff
 
-if (isset($_GET['toggle'])) {
-
-    $staffId = (int) $_GET['toggle'];
-
-    $stmt = $conn->prepare(
-        "SELECT user_id, status
-         FROM staff
-         WHERE id = ?"
-    );
-
-    $stmt->bind_param(
-        'i',
-        $staffId
-    );
-
-    $stmt->execute();
-
-    $result = $stmt->get_result();
-    $staff = $result->fetch_assoc();
-
-    $stmt->close();
-
-    if ($staff) {
-
-        if ($staff['status'] === 'active') {
-            $newStatus = 'inactive';
-        } else {
-            $newStatus = 'active';
-        }
-
-        // Update staff status
-
-        $stmt = $conn->prepare(
-            "UPDATE staff
-             SET status = ?
-             WHERE id = ?"
-        );
-
-        $stmt->bind_param(
-            'si',
-            $newStatus,
-            $staffId
-        );
-
-        $stmt->execute();
-        $stmt->close();
-
-        // Update user status
-
-        $stmt = $conn->prepare(
-            "UPDATE users
-             SET status = ?
-             WHERE id = ?"
-        );
-
-        $stmt->bind_param(
-            'si',
-            $newStatus,
-            $staff['user_id']
-        );
-
-        $stmt->execute();
-        $stmt->close();
-    }
-
-    header(
-        'Location: ' .
-        BASE_URL .
-        '/admin/manage-staff.php'
-    );
-
-    exit;
-}
-
-// Get staff being edited
-
+// Get staff for editing
 $editStaff = null;
 
 if (isset($_GET['edit'])) {
@@ -383,6 +432,7 @@ if (isset($_GET['edit'])) {
             s.id,
             s.address,
             s.join_date,
+            s.status,
             u.username,
             u.full_name,
             u.phone
@@ -391,11 +441,7 @@ if (isset($_GET['edit'])) {
          WHERE s.id = ?"
     );
 
-    $stmt->bind_param(
-        'i',
-        $editId
-    );
-
+    $stmt->bind_param('i', $editId);
     $stmt->execute();
 
     $result = $stmt->get_result();
@@ -404,8 +450,8 @@ if (isset($_GET['edit'])) {
     $stmt->close();
 }
 
-// Prepare phone values for edit
 
+// Prepare phone values
 $editPhonePrefix = '';
 $editPhoneNumber = '';
 
@@ -425,19 +471,21 @@ if ($editStaff && !empty($editStaff['phone'])) {
     }
 }
 
+
 // Get all staff
+$staffList = $conn->query(
+    "SELECT
+        s.id,
+        s.status,
+        s.join_date,
+        u.username,
+        u.full_name,
+        u.phone
+     FROM staff s
+     JOIN users u ON s.user_id = u.id
+     ORDER BY s.id DESC"
+);
 
-$sql = "SELECT
-            s.id,
-            s.status,
-            u.username,
-            u.full_name,
-            u.phone
-        FROM staff s
-        JOIN users u ON s.user_id = u.id
-        ORDER BY s.id DESC";
-
-$staffList = $conn->query($sql);
 
 include __DIR__ . '/../includes/header.php';
 
@@ -449,24 +497,25 @@ include __DIR__ . '/../includes/header.php';
         Manage Staff
     </h1>
 
+
     <?php if ($message !== ''): ?>
 
         <div
             id="message"
             class="mb-6 p-3 rounded-md
-                <?php
-                echo $messageType === 'success'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700';
-                ?>"
+            <?php
+            echo $messageType === 'success'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-red-100 text-red-700';
+            ?>"
         >
             <?php echo e($message); ?>
         </div>
 
     <?php endif; ?>
 
-    <!-- Add / Edit Staff -->
 
+    <!-- Add / Edit Staff -->
     <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
 
         <h2 class="text-lg font-semibold text-gray-800 mb-4">
@@ -479,10 +528,8 @@ include __DIR__ . '/../includes/header.php';
 
         </h2>
 
-        <form
-            method="POST"
-            id="userForm"
-        >
+
+        <form method="POST" id="userForm">
 
             <?php if ($editStaff): ?>
 
@@ -508,78 +555,94 @@ include __DIR__ . '/../includes/header.php';
 
             <?php endif; ?>
 
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
+
                 <!-- Username -->
+                <div>
 
-                <?php if (!$editStaff): ?>
+                    <label
+                        for="username"
+                        class="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                        Username
+                    </label>
 
-                    <div>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        value="<?php
+                            echo $editStaff
+                                ? e($editStaff['username'])
+                                : '';
+                        ?>"
+                        placeholder="Enter username"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                    >
 
-                        <label
-                            for="username"
-                            class="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                            Username
-                        </label>
+                    <span
+                        id="username-error"
+                        class="text-sm text-red-600"
+                    ></span>
+
+                </div>
+
+
+                <!-- Password -->
+                <div>
+
+                    <label
+                        for="password"
+                        class="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                        <?php echo $editStaff ? 'New Password' : 'Password'; ?>
+                    </label>
+
+                    <div class="relative">
 
                         <input
-                            type="text"
-                            id="username"
-                            name="username"
-                            placeholder="Enter username"
-                            class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="<?php
+                                echo $editStaff
+                                    ? 'Leave blank to keep current password'
+                                    : 'Enter password';
+                            ?>"
+                            class="w-full border border-gray-300 rounded-md px-3 py-2 pr-12 focus:outline-none focus:border-blue-500"
                         >
 
-                        <span
-                            id="username-error"
-                            class="text-sm text-red-600"
-                        ></span>
+                        <button
+                            type="button"
+                            id="togglePassword"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer"
+                            style="display: none;"
+                            aria-label="Show password"
+                        >
+                            👁
+                        </button>
 
                     </div>
 
-                    <!-- Password -->
+                    <span
+                        id="password-error"
+                        class="text-sm text-red-600"
+                    ></span>
 
-                    <div>
+                    <?php if ($editStaff): ?>
 
-                        <label
-                            for="password"
-                            class="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                            Password
-                        </label>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Enter a password only if you want to change it.
+                        </p>
 
-                        <div class="relative">
+                    <?php endif; ?>
 
-                            <input
-                                type="password"
-                                id="password"
-                                name="password"
-                                placeholder="Enter password"
-                                class="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:outline-none focus:border-blue-500"
-                            >
+                </div>
 
-                            <button
-                                type="button"
-                                id="togglePassword"
-                                class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                            >
-                                👁
-                            </button>
-
-                        </div>
-
-                        <span
-                            id="password-error"
-                            class="text-sm text-red-600"
-                        ></span>
-
-                    </div>
-
-                <?php endif; ?>
 
                 <!-- Full Name -->
-
                 <div>
 
                     <label
@@ -609,8 +672,8 @@ include __DIR__ . '/../includes/header.php';
 
                 </div>
 
-                <!-- Phone -->
 
+                <!-- Phone -->
                 <div>
 
                     <label
@@ -658,7 +721,6 @@ include __DIR__ . '/../includes/header.php';
                             value="<?php echo e($editPhoneNumber); ?>"
                             maxlength="8"
                             inputmode="numeric"
-                            autocomplete="tel"
                             placeholder="12345678"
                             class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                         >
@@ -669,11 +731,7 @@ include __DIR__ . '/../includes/header.php';
                         type="hidden"
                         id="phone"
                         name="phone"
-                        value="<?php
-                            echo $editStaff
-                                ? e($editStaff['phone'])
-                                : '';
-                        ?>"
+                        value=""
                     >
 
                     <span
@@ -683,8 +741,8 @@ include __DIR__ . '/../includes/header.php';
 
                 </div>
 
-                <!-- Address -->
 
+                <!-- Address -->
                 <div>
 
                     <label
@@ -705,7 +763,7 @@ include __DIR__ . '/../includes/header.php';
                         ?>"
                         minlength="3"
                         maxlength="200"
-                        placeholder="Enter address"
+                        placeholder="Enter your Address"
                         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
 
@@ -716,8 +774,8 @@ include __DIR__ . '/../includes/header.php';
 
                 </div>
 
-                <!-- Join Date -->
 
+                <!-- Join Date -->
                 <div>
 
                     <label
@@ -727,19 +785,35 @@ include __DIR__ . '/../includes/header.php';
                         Join Date
                     </label>
 
-                    <input
-                        type="date"
-                        id="join_date"
-                        name="join_date"
-                        value="<?php
-                            echo $editStaff
-                                ? e($editStaff['join_date'])
-                                : date('Y-m-d');
-                        ?>"
-                        min="<?php echo date('Y-m-d'); ?>"
-                        max="<?php echo date('Y-m-d'); ?>"
-                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
-                    >
+                    <?php if ($editStaff): ?>
+
+                        <input
+                            type="text"
+                            value="<?php echo e($editStaff['join_date']); ?>"
+                            readonly
+                            class="w-full bg-gray-100 border border-gray-300 rounded-md px-3 py-2 text-gray-600"
+                        >
+
+                        <p class="text-xs text-gray-500 mt-1">
+                            Original join date cannot be changed.
+                        </p>
+
+                    <?php else: ?>
+
+                        <input
+                            type="date"
+                            id="join_date"
+                            name="join_date"
+                            value="<?php echo date('Y-m-d'); ?>"
+                            readonly
+                            class="w-full bg-gray-100 border border-gray-300 rounded-md px-3 py-2 text-gray-600"
+                        >
+
+                        <p class="text-xs text-gray-500 mt-1">
+                            New staff join date is automatically set to today.
+                        </p>
+
+                    <?php endif; ?>
 
                     <span
                         id="join-date-error"
@@ -750,8 +824,8 @@ include __DIR__ . '/../includes/header.php';
 
             </div>
 
-            <!-- Buttons -->
 
+            <!-- Buttons -->
             <div class="mt-5 flex gap-2">
 
                 <button
@@ -764,6 +838,7 @@ include __DIR__ . '/../includes/header.php';
                         : 'Add Staff';
                     ?>
                 </button>
+
 
                 <?php if ($editStaff): ?>
 
@@ -782,8 +857,8 @@ include __DIR__ . '/../includes/header.php';
 
     </div>
 
-    <!-- Staff List -->
 
+    <!-- Staff List -->
     <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
 
         <div class="px-6 py-4 border-b border-gray-200">
@@ -793,6 +868,7 @@ include __DIR__ . '/../includes/header.php';
             </h2>
 
         </div>
+
 
         <?php if ($staffList->num_rows === 0): ?>
 
@@ -827,6 +903,10 @@ include __DIR__ . '/../includes/header.php';
                             </th>
 
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                                Join Date
+                            </th>
+
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">
                                 Status
                             </th>
 
@@ -837,6 +917,7 @@ include __DIR__ . '/../includes/header.php';
                         </tr>
 
                     </thead>
+
 
                     <tbody class="divide-y divide-gray-200">
 
@@ -861,6 +942,10 @@ include __DIR__ . '/../includes/header.php';
                                 </td>
 
                                 <td class="px-4 py-3 text-sm">
+                                    <?php echo formatDate($row['join_date']); ?>
+                                </td>
+
+                                <td class="px-4 py-3 text-sm">
 
                                     <?php if ($row['status'] === 'active'): ?>
 
@@ -870,7 +955,7 @@ include __DIR__ . '/../includes/header.php';
 
                                     <?php else: ?>
 
-                                        <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700">
+                                        <span class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700">
                                             Inactive
                                         </span>
 
@@ -878,10 +963,12 @@ include __DIR__ . '/../includes/header.php';
 
                                 </td>
 
+
                                 <td class="px-4 py-3 text-sm">
 
-                                    <div class="flex gap-3">
+                                    <div class="flex flex-wrap gap-3">
 
+                                        <!-- Edit -->
                                         <a
                                             href="<?php echo BASE_URL; ?>/admin/manage-staff.php?edit=<?php echo (int) $row['id']; ?>"
                                             class="text-blue-600 hover:underline"
@@ -889,21 +976,75 @@ include __DIR__ . '/../includes/header.php';
                                             Edit
                                         </a>
 
-                                        <a
-                                            href="<?php echo BASE_URL; ?>/admin/manage-staff.php?toggle=<?php echo (int) $row['id']; ?>"
-                                            class="<?php
-                                                echo $row['status'] === 'active'
-                                                    ? 'text-red-600'
-                                                    : 'text-green-600';
-                                            ?> hover:underline"
-                                            onclick="return confirm('Change status for this staff?');"
-                                        >
-                                            <?php
-                                            echo $row['status'] === 'active'
-                                                ? 'Deactivate'
-                                                : 'Activate';
-                                            ?>
-                                        </a>
+
+                                        <!-- Active -->
+                                        <?php if ($row['status'] === 'active'): ?>
+
+                                            <form method="POST" class="inline">
+
+                                                <input
+                                                    type="hidden"
+                                                    name="action"
+                                                    value="status"
+                                                >
+
+                                                <input
+                                                    type="hidden"
+                                                    name="staff_id"
+                                                    value="<?php echo (int) $row['id']; ?>"
+                                                >
+
+                                                <input
+                                                    type="hidden"
+                                                    name="status"
+                                                    value="inactive"
+                                                >
+
+                                                <button
+                                                    type="submit"
+                                                    class="text-yellow-600 hover:underline"
+                                                    onclick="return confirm('Deactivate this staff?');"
+                                                >
+                                                    Deactivate
+                                                </button>
+
+                                            </form>
+
+
+                                        <!-- Inactive -->
+                                        <?php else: ?>
+
+                                            <form method="POST" class="inline">
+
+                                                <input
+                                                    type="hidden"
+                                                    name="action"
+                                                    value="status"
+                                                >
+
+                                                <input
+                                                    type="hidden"
+                                                    name="staff_id"
+                                                    value="<?php echo (int) $row['id']; ?>"
+                                                >
+
+                                                <input
+                                                    type="hidden"
+                                                    name="status"
+                                                    value="active"
+                                                >
+
+                                                <button
+                                                    type="submit"
+                                                    class="text-green-600 hover:underline"
+                                                    onclick="return confirm('Activate this staff?');"
+                                                >
+                                                    Activate
+                                                </button>
+
+                                            </form>
+
+                                        <?php endif; ?>
 
                                     </div>
 
@@ -924,6 +1065,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
 
 </div>
+
 
 <script src="<?php echo BASE_URL; ?>/assets/js/validate-user-form.js"></script>
 

@@ -9,9 +9,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const username = document.getElementById('username');
     const password = document.getElementById('password');
     const fullName = document.getElementById('full_name');
+
     const phonePrefix = document.getElementById('phone_prefix');
     const phoneNumber = document.getElementById('phone_number');
     const phone = document.getElementById('phone');
+
     const address = document.getElementById('address');
     const joinDate = document.getElementById('join_date');
 
@@ -22,9 +24,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const addressError = document.getElementById('address-error');
     const joinDateError = document.getElementById('join-date-error');
 
-    // Password eye button
+    // Check whether this is Add or Edit
+    const actionInput = form.querySelector('input[name="action"]');
+    const action = actionInput ? actionInput.value : 'add';
 
-    const togglePassword = document.getElementById('togglePassword');
+    const isEdit = action === 'edit';
+
+
+    // Password eye button
+    const togglePassword =
+        document.getElementById('togglePassword');
 
     if (togglePassword && password) {
 
@@ -33,57 +42,92 @@ document.addEventListener('DOMContentLoaded', function () {
         password.addEventListener('input', function () {
 
             if (password.value.length > 0) {
+
                 togglePassword.style.display = 'block';
+
             } else {
+
                 togglePassword.style.display = 'none';
+
                 password.type = 'password';
+
                 togglePassword.textContent = '👁';
+
+                togglePassword.setAttribute(
+                    'aria-label',
+                    'Show password'
+                );
             }
 
         });
 
-        togglePassword.addEventListener('click', function () {
+
+        togglePassword.addEventListener('click', function (event) {
+
+            event.preventDefault();
 
             if (password.type === 'password') {
 
                 password.type = 'text';
+
                 togglePassword.textContent = '🙈';
+
+                togglePassword.setAttribute(
+                    'aria-label',
+                    'Hide password'
+                );
 
             } else {
 
                 password.type = 'password';
+
                 togglePassword.textContent = '👁';
 
+                togglePassword.setAttribute(
+                    'aria-label',
+                    'Show password'
+                );
             }
 
         });
 
     }
 
-    // Hide success message after 3 seconds
 
+    // Hide success/error message after 3 seconds
     const message = document.getElementById('message');
 
     if (message) {
 
         setTimeout(function () {
-            message.remove();
+
+            message.style.opacity = '0';
+
+            message.style.transition =
+                'opacity 0.3s ease';
+
+            setTimeout(function () {
+
+                message.remove();
+
+            }, 300);
+
         }, 3000);
 
     }
 
-    // Check username
 
+    // Check username
     function checkUsername() {
 
-        if (!username) {
+        if (!username || !usernameError) {
             return true;
         }
 
         const value = username.value.trim();
 
-        const usernameRegex =
-            /^[A-Za-z][A-Za-z0-9_]{2,19}$/;
+        const usernameRegex =/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/;
+
 
         if (value === '') {
 
@@ -93,6 +137,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         if (!usernameRegex.test(value)) {
 
             usernameError.textContent =
@@ -101,16 +146,17 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         usernameError.textContent = '';
 
         return true;
     }
 
-    // Check password
 
+    // Check password
     function checkPassword() {
 
-        if (!password) {
+        if (!password || !passwordError) {
             return true;
         }
 
@@ -119,6 +165,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const passwordRegex =
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/;
 
+
+        // Password is optional during Edit
+        if (isEdit && value === '') {
+
+            passwordError.textContent = '';
+
+            return true;
+        }
+
+
+        // Password is required during Add
         if (value === '') {
 
             passwordError.textContent =
@@ -126,6 +183,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
+
 
         if (!passwordRegex.test(value)) {
 
@@ -135,18 +193,24 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         passwordError.textContent = '';
 
         return true;
     }
 
-    // Check full name
 
+    // Check full name
     function checkFullName() {
+
+        if (!fullName || !fullNameError) {
+            return true;
+        }
 
         const value = fullName.value.trim();
 
         const nameRegex = /^[A-Za-z ]+$/;
+
 
         if (value === '') {
 
@@ -156,6 +220,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         if (value.length < 2) {
 
             fullNameError.textContent =
@@ -163,6 +228,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
+
 
         if (!nameRegex.test(value)) {
 
@@ -172,17 +238,28 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         fullNameError.textContent = '';
 
         return true;
     }
 
-    // Check phone
 
+    // Check phone
     function checkPhone() {
 
+        if (
+            !phonePrefix ||
+            !phoneNumber ||
+            !phone ||
+            !phoneError
+        ) {
+            return true;
+        }
+
         const prefix = phonePrefix.value;
-        const number = phoneNumber.value;
+        const number = phoneNumber.value.trim();
+
 
         if (prefix !== '97' && prefix !== '98') {
 
@@ -192,6 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         if (number === '') {
 
             phoneError.textContent =
@@ -199,6 +277,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
+
 
         if (!/^\d{8}$/.test(number)) {
 
@@ -208,6 +287,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
+        // Combine prefix and number
         phone.value = prefix + number;
 
         phoneError.textContent = '';
@@ -215,13 +296,16 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
-    // Check address
 
+    // Check address
     function checkAddress() {
+
+        if (!address || !addressError) {
+            return true;
+        }
 
         const value = address.value.trim();
 
-        const addressRegex = /^[A-Za-z ]+$/;
 
         if (value === '') {
 
@@ -231,6 +315,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         if (value.length < 3) {
 
             addressError.textContent =
@@ -238,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
+
 
         if (value.length > 200) {
 
@@ -247,24 +333,33 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-        if (!addressRegex.test(value)) {
-
-            addressError.textContent =
-                'Address can contain letters and spaces only.';
-
-            return false;
-        }
 
         addressError.textContent = '';
 
         return true;
     }
 
-    // Check join date
 
+    // Check join date
     function checkJoinDate() {
 
+        if (isEdit) {
+
+            if (joinDateError) {
+                joinDateError.textContent = '';
+            }
+
+            return true;
+        }
+
+
+        if (!joinDate || !joinDateError) {
+            return true;
+        }
+
+
         const value = joinDate.value;
+
 
         if (value === '') {
 
@@ -273,6 +368,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
+
 
         const today = new Date();
 
@@ -284,8 +380,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const day =
             String(today.getDate()).padStart(2, '0');
 
+
         const todayDate =
             year + '-' + month + '-' + day;
+
 
         if (value !== todayDate) {
 
@@ -295,53 +393,85 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+
         joinDateError.textContent = '';
 
         return true;
     }
 
+
     // Allow only 8 phone digits
+    if (phoneNumber) {
 
-    phoneNumber.addEventListener('input', function () {
+        phoneNumber.addEventListener('input', function () {
 
-        phoneNumber.value =
-            phoneNumber.value
-                .replace(/\D/g, '')
-                .slice(0, 8);
+            phoneNumber.value =
+                phoneNumber.value
+                    .replace(/\D/g, '')
+                    .slice(0, 8);
 
-        checkPhone();
-    });
+            checkPhone();
 
-    // Validate username
+        });
 
+    }
+
+
+    // Username validation
     if (username) {
-        username.addEventListener('blur', checkUsername);
+        username.addEventListener(
+            'blur',
+            checkUsername
+        );
     }
 
-    // Validate password
 
+    // Password validation
     if (password) {
-        password.addEventListener('blur', checkPassword);
+        password.addEventListener(
+            'blur',
+            checkPassword
+        );
     }
 
-    // Validate full name
 
-    fullName.addEventListener('blur', checkFullName);
+    // Full name validation
+    if (fullName) {
+        fullName.addEventListener(
+            'blur',
+            checkFullName
+        );
+    }
 
-    // Validate phone
 
-    phonePrefix.addEventListener('change', checkPhone);
+    // Phone validation
+    if (phonePrefix) {
+        phonePrefix.addEventListener(
+            'change',
+            checkPhone
+        );
+    }
 
-    // Validate address
 
-    address.addEventListener('blur', checkAddress);
+    // Address validation
+    if (address) {
+        address.addEventListener(
+            'blur',
+            checkAddress
+        );
+    }
 
-    // Validate join date
 
-    joinDate.addEventListener('change', checkJoinDate);
+    // Join date validation
+    if (joinDate) {
+        joinDate.addEventListener(
+            'change',
+            checkJoinDate
+        );
+    }
 
-    // Validate form
 
+    // Validate form before submit
     form.addEventListener('submit', function (event) {
 
         const validUsername = checkUsername();
@@ -350,6 +480,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const validPhone = checkPhone();
         const validAddress = checkAddress();
         const validJoinDate = checkJoinDate();
+
 
         if (
             !validUsername ||
