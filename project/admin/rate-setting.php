@@ -638,7 +638,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 
-<script src="<?php echo BASE_URL; ?>/assets/js/validate-rate-setting.js"></script>
+<script src="<?php echo BASE_URL; ?>/assets/js/validate-rate-settings.js"></script>
 
 
 <script>
