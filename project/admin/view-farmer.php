@@ -13,11 +13,30 @@ if ($id <= 0) {
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get Farmer
-|--------------------------------------------------------------------------
-*/
+// Today's date
+$today = date('Y-m-d');
+
+// Get selected dates
+$dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-01');
+$dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : $today;
+
+// Prevent future dates
+if ($dateFrom > $today) {
+    $dateFrom = date('Y-m-01');
+}
+
+if ($dateTo > $today) {
+    $dateTo = $today;
+}
+
+// Prevent invalid date range
+if ($dateFrom > $dateTo) {
+    $dateFrom = date('Y-m-01');
+    $dateTo = $today;
+}
+
+
+// Get Farmer
 
 $stmt = $conn->prepare(
     "SELECT
@@ -78,11 +97,7 @@ if (!$farmer) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Get Milk Entries
-|--------------------------------------------------------------------------
-*/
+// Get Milk Entries
 
 $milkRows = array();
 
@@ -101,10 +116,11 @@ $stmt = $conn->prepare(
         amount
      FROM milk_entries
      WHERE farmer_id = ?
+     AND entry_date BETWEEN ? AND ?
      ORDER BY entry_date DESC, id DESC"
 );
 
-$stmt->bind_param('i', $id);
+$stmt->bind_param('iss', $id, $dateFrom, $dateTo);
 $stmt->execute();
 
 $result = $stmt->get_result();
@@ -120,11 +136,7 @@ while ($row = $result->fetch_assoc()) {
 $stmt->close();
 
 
-/*
-|--------------------------------------------------------------------------
-| Get Dana Entries
-|--------------------------------------------------------------------------
-*/
+// Get Dana Entries
 
 $danaRows = array();
 
@@ -141,10 +153,11 @@ $stmt = $conn->prepare(
         amount
      FROM dana_entries
      WHERE farmer_id = ?
+     AND entry_date BETWEEN ? AND ?
      ORDER BY entry_date DESC, id DESC"
 );
 
-$stmt->bind_param('i', $id);
+$stmt->bind_param('iss', $id, $dateFrom, $dateTo);
 $stmt->execute();
 
 $result = $stmt->get_result();
@@ -160,11 +173,7 @@ while ($row = $result->fetch_assoc()) {
 $stmt->close();
 
 
-/*
-|--------------------------------------------------------------------------
-| Calculate Net Payable
-|--------------------------------------------------------------------------
-*/
+// Calculate Net Payable
 
 $netPayable = $totalMilkAmount - $totalDanaAmount;
 
@@ -264,6 +273,84 @@ include __DIR__ . '/../includes/header.php';
         </div>
 
     </div>
+
+
+    <!-- Date Filter -->
+
+    <form
+        method="GET"
+        class="bg-white border border-gray-200 rounded-lg p-5 mb-6"
+    >
+
+        <input
+            type="hidden"
+            name="id"
+            value="<?php echo $farmer['id']; ?>"
+        >
+
+        <div class="flex flex-col md:flex-row md:items-end gap-4">
+
+            <div class="flex-1">
+
+                <label
+                    for="date_from"
+                    class="block text-sm font-medium text-gray-700 mb-2"
+                >
+                    Date From
+                </label>
+
+                <input
+                    type="date"
+                    id="date_from"
+                    name="date_from"
+                    value="<?php echo htmlspecialchars($dateFrom); ?>"
+                    max="<?php echo $today; ?>"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+
+            </div>
+
+
+            <div class="flex-1">
+
+                <label
+                    for="date_to"
+                    class="block text-sm font-medium text-gray-700 mb-2"
+                >
+                    Date To
+                </label>
+
+                <input
+                    type="date"
+                    id="date_to"
+                    name="date_to"
+                    value="<?php echo htmlspecialchars($dateTo); ?>"
+                    max="<?php echo $today; ?>"
+                    min="<?php echo htmlspecialchars($dateFrom); ?>"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+
+            </div>
+
+
+            <div>
+
+                <button
+                    type="submit"
+                    class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg transition"
+                >
+                    Show
+                </button>
+
+            </div>
+
+        </div>
+
+        <p class="text-xs text-gray-500 mt-3">
+            Select a date range to view milk and dana transactions. Future dates are not available.
+        </p>
+
+    </form>
 
 
     <!-- Summary -->
@@ -604,5 +691,25 @@ include __DIR__ . '/../includes/header.php';
     </div>
 
 </div>
+
+
+<script>
+
+// Keep Date To after or equal to Date From
+const dateFrom = document.getElementById('date_from');
+const dateTo = document.getElementById('date_to');
+
+dateFrom.addEventListener('change', function () {
+
+    dateTo.min = this.value;
+
+    if (dateTo.value < this.value) {
+        dateTo.value = this.value;
+    }
+
+});
+
+</script>
+
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

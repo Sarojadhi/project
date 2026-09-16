@@ -4,648 +4,617 @@ require_once __DIR__ . '/../includes/auth.php';
 requireRole('admin');
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/functions.php';
 
-$message = '';
-$messageType = '';
+$success = '';
+$error = '';
 
-// ------------------------------------
-// ADD RATE
-// ------------------------------------
+$fatRate = '';
+$snfRate = '';
 
-if (isset($_POST['add_rate'])) {
 
-    $fat = $_POST['fat'];
-    $snf = $_POST['snf'];
-    $rate = $_POST['rate'];
+// Get current milk rates
 
-    $stmt = $conn->prepare("
-        INSERT INTO rate_chart
-        (fat_value, snf_value, rate_per_litre, effective_from)
-        VALUES (?, ?, ?, CURDATE())
-    ");
+$stmt = $conn->prepare(
+    "SELECT id, fat_rate, snf_rate
+     FROM milk_rate_settings
+     ORDER BY id DESC
+     LIMIT 1"
+);
 
-    $stmt->bind_param("ddd", $fat, $snf, $rate);
+$stmt->execute();
 
-    if ($stmt->execute()) {
-        $message = "Rate added successfully.";
-        $messageType = "success";
+$result = $stmt->get_result();
+
+$currentRate = $result->fetch_assoc();
+
+$stmt->close();
+
+
+// Update milk rates
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['update_milk_rate'])
+) {
+
+    $fatRate = trim($_POST['fat_rate'] ?? '');
+    $snfRate = trim($_POST['snf_rate'] ?? '');
+
+    if ($fatRate === '' || $snfRate === '') {
+
+        $error = 'Please enter both FAT and SNF rates.';
+
+    } elseif (
+        !is_numeric($fatRate) ||
+        !is_numeric($snfRate)
+    ) {
+
+        $error = 'FAT and SNF rates must be valid numbers.';
+
+    } elseif (
+        (float) $fatRate <= 0 ||
+        (float) $snfRate <= 0
+    ) {
+
+        $error = 'FAT and SNF rates must be greater than 0.';
+
     } else {
-        $message = "Failed to add rate.";
-        $messageType = "error";
+
+        $fatRate = (float) $fatRate;
+        $snfRate = (float) $snfRate;
+
+
+        if ($currentRate) {
+
+            $stmt = $conn->prepare(
+                "UPDATE milk_rate_settings
+                 SET fat_rate = ?, snf_rate = ?
+                 WHERE id = ?"
+            );
+
+            $stmt->bind_param(
+                'ddi',
+                $fatRate,
+                $snfRate,
+                $currentRate['id']
+            );
+
+        } else {
+
+            $stmt = $conn->prepare(
+                "INSERT INTO milk_rate_settings
+                 (fat_rate, snf_rate)
+                 VALUES (?, ?)"
+            );
+
+            $stmt->bind_param(
+                'dd',
+                $fatRate,
+                $snfRate
+            );
+        }
+
+
+        if ($stmt->execute()) {
+
+            $success = 'Milk rates updated successfully.';
+
+        } else {
+
+            $error = 'Failed to update milk rates.';
+
+        }
+
+        $stmt->close();
     }
 }
 
 
-// ------------------------------------
-// UPDATE RATE
-// ------------------------------------
+// Load current milk rates again
 
-elseif (isset($_POST['update_rate'])) {
+$stmt = $conn->prepare(
+    "SELECT id, fat_rate, snf_rate
+     FROM milk_rate_settings
+     ORDER BY id DESC
+     LIMIT 1"
+);
 
-    $id = (int) $_POST['rate_id'];
-    $fat = $_POST['fat'];
-    $snf = $_POST['snf'];
-    $rate = $_POST['rate'];
+$stmt->execute();
 
-    $stmt = $conn->prepare("
-        UPDATE rate_chart
-        SET fat_value = ?, snf_value = ?, rate_per_litre = ?
-        WHERE id = ?
-    ");
+$result = $stmt->get_result();
 
-    $stmt->bind_param("dddi", $fat, $snf, $rate, $id);
+$currentRate = $result->fetch_assoc();
 
-    if ($stmt->execute()) {
-        $message = "Rate updated successfully.";
-        $messageType = "success";
+$stmt->close();
+
+
+if ($currentRate) {
+
+    $fatRate = $currentRate['fat_rate'];
+    $snfRate = $currentRate['snf_rate'];
+
+}
+
+
+// Add dana price
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['add_dana'])
+) {
+
+    $itemName = trim($_POST['item_name'] ?? '');
+    $price = trim($_POST['price_per_unit'] ?? '');
+
+
+    if ($itemName === '' || $price === '') {
+
+        $error = 'Please enter item name and price.';
+
+    } elseif (strlen($itemName) < 3) {
+
+        $error = 'Item name must contain at least 3 characters.';
+
+    } elseif (!is_numeric($price)) {
+
+        $error = 'Dana price must be a valid number.';
+
+    } elseif ((float) $price <= 0) {
+
+        $error = 'Dana price must be greater than 0.';
+
     } else {
-        $message = "Failed to update rate.";
-        $messageType = "error";
+
+        $price = (float) $price;
+
+
+        $stmt = $conn->prepare(
+            "INSERT INTO dana_price
+             (item_name, price_per_unit, effective_from)
+             VALUES (?, ?, CURDATE())"
+        );
+
+        $stmt->bind_param(
+            'sd',
+            $itemName,
+            $price
+        );
+
+
+        if ($stmt->execute()) {
+
+            $success = 'Dana price added successfully.';
+
+        } else {
+
+            $error = 'Failed to add dana price.';
+
+        }
+
+        $stmt->close();
     }
 }
 
 
-// ------------------------------------
-// DELETE RATE
-// ------------------------------------
+// Update dana price
 
-elseif (isset($_POST['delete_rate'])) {
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['update_dana'])
+) {
 
-    $id = (int) $_POST['rate_id'];
-
-    $stmt = $conn->prepare("
-        DELETE FROM rate_chart
-        WHERE id = ?
-    ");
-
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-
-    $message = "Rate deleted.";
-    $messageType = "success";
-}
+    $danaId = (int) ($_POST['dana_id'] ?? 0);
+    $price = trim($_POST['price_per_unit'] ?? '');
 
 
-// ------------------------------------
-// ADD DANA PRICE
-// ------------------------------------
+    if ($danaId <= 0) {
 
-elseif (isset($_POST['add_dana'])) {
+        $error = 'Invalid dana item.';
 
-    $item = trim($_POST['item_name']);
-    $price = $_POST['price'];
+    } elseif (!is_numeric($price)) {
 
-    $stmt = $conn->prepare("
-        INSERT INTO dana_price
-        (item_name, price_per_unit, effective_from)
-        VALUES (?, ?, CURDATE())
-    ");
+        $error = 'Dana price must be a valid number.';
 
-    $stmt->bind_param("sd", $item, $price);
+    } elseif ((float) $price <= 0) {
 
-    if ($stmt->execute()) {
-        $message = "Dana price added successfully.";
-        $messageType = "success";
+        $error = 'Dana price must be greater than 0.';
+
     } else {
-        $message = "Failed to add dana price.";
-        $messageType = "error";
+
+        $price = (float) $price;
+
+
+        $stmt = $conn->prepare(
+            "UPDATE dana_price
+             SET price_per_unit = ?
+             WHERE id = ?"
+        );
+
+        $stmt->bind_param(
+            'di',
+            $price,
+            $danaId
+        );
+
+
+        if ($stmt->execute()) {
+
+            $success = 'Dana price updated successfully.';
+
+        } else {
+
+            $error = 'Failed to update dana price.';
+
+        }
+
+        $stmt->close();
     }
 }
 
 
-// ------------------------------------
-// UPDATE DANA PRICE
-// ------------------------------------
+// Get dana prices
 
-elseif (isset($_POST['update_dana'])) {
+$danaPrices = array();
 
-    $id = (int) $_POST['dana_id'];
-    $item = trim($_POST['item_name']);
-    $price = $_POST['price'];
+$stmt = $conn->prepare(
+    "SELECT id, item_name, price_per_unit, effective_from
+     FROM dana_price
+     ORDER BY id DESC"
+);
 
-    $stmt = $conn->prepare("
-        UPDATE dana_price
-        SET item_name = ?, price_per_unit = ?
-        WHERE id = ?
-    ");
+$stmt->execute();
 
-    $stmt->bind_param("sdi", $item, $price, $id);
+$result = $stmt->get_result();
 
-    if ($stmt->execute()) {
-        $message = "Dana price updated successfully.";
-        $messageType = "success";
-    } else {
-        $message = "Failed to update dana price.";
-        $messageType = "error";
-    }
+
+while ($row = $result->fetch_assoc()) {
+
+    $danaPrices[] = $row;
+
 }
 
-
-// ------------------------------------
-// DELETE DANA PRICE
-// ------------------------------------
-
-elseif (isset($_POST['delete_dana'])) {
-
-    $id = (int) $_POST['dana_id'];
-
-    $stmt = $conn->prepare("
-        DELETE FROM dana_price
-        WHERE id = ?
-    ");
-
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-
-    $message = "Dana price deleted.";
-    $messageType = "success";
-}
+$stmt->close();
 
 
-// ------------------------------------
-// GET EDIT RATE
-// ------------------------------------
-
-$editRate = null;
-
-if (isset($_GET['edit_rate'])) {
-
-    $id = (int) $_GET['edit_rate'];
-
-    $stmt = $conn->prepare("
-        SELECT *
-        FROM rate_chart
-        WHERE id = ?
-    ");
-
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-
-    $editRate = $stmt->get_result()->fetch_assoc();
-}
-
-
-// ------------------------------------
-// GET EDIT DANA
-// ------------------------------------
-
-$editDana = null;
-
-if (isset($_GET['edit_dana'])) {
-
-    $id = (int) $_GET['edit_dana'];
-
-    $stmt = $conn->prepare("
-        SELECT *
-        FROM dana_price
-        WHERE id = ?
-    ");
-
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-
-    $editDana = $stmt->get_result()->fetch_assoc();
-}
-
-
-// ------------------------------------
-// GET ALL RATES
-// ------------------------------------
-
-$rates = $conn->query("
-    SELECT *
-    FROM rate_chart
-    ORDER BY fat_value, snf_value
-");
-
-
-// ------------------------------------
-// GET ALL DANA PRICES
-// ------------------------------------
-
-$danaPrices = $conn->query("
-    SELECT *
-    FROM dana_price
-    ORDER BY item_name
-");
-
-include __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/header.php';
 
 ?>
 
-<div class="max-w-6xl mx-auto px-4 py-6">
+<div class="max-w-6xl mx-auto px-4 py-8">
 
-    <h1 class="text-2xl font-bold text-gray-800 mb-1">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">
         Rate Settings
     </h1>
 
-    <p class="text-gray-500 text-sm mb-6">
-        Manage milk rates and dana prices.
-    </p>
 
+    <!-- Success Message -->
 
-    <!-- MESSAGE -->
+    <?php if ($success): ?>
 
-    <?php if ($message !== ''): ?>
-
-        <div class="mb-6 p-3 rounded border
-            <?php echo $messageType === 'success'
-                ? 'bg-green-50 border-green-200 text-green-700'
-                : 'bg-red-50 border-red-200 text-red-700';
-            ?>">
-
-            <?php echo htmlspecialchars($message); ?>
-
+        <div
+            id="successMessage"
+            class="mb-6 bg-green-100 border border-green-300 text-green-700 px-4 py-3 rounded"
+        >
+            <?php echo e($success); ?>
         </div>
 
     <?php endif; ?>
 
 
-    <!-- MILK RATE -->
+    <!-- Error Message -->
 
-    <div class="bg-white border rounded-lg shadow-sm mb-6">
+    <?php if ($error): ?>
 
-        <div class="px-5 py-4 border-b">
-
-            <h2 class="font-semibold text-gray-800">
-                <?php echo $editRate ? 'Edit Milk Rate' : 'Add Milk Rate'; ?>
-            </h2>
-
+        <div
+            class="mb-6 bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded"
+        >
+            <?php echo e($error); ?>
         </div>
 
-
-        <form method="POST" class="p-5">
-
-            <?php if ($editRate): ?>
-
-                <input
-                    type="hidden"
-                    name="rate_id"
-                    value="<?php echo $editRate['id']; ?>"
-                >
-
-            <?php endif; ?>
+    <?php endif; ?>
 
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <!-- Milk Rate Section -->
+
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+
+        <h2 class="text-lg font-semibold text-gray-800 mb-6">
+            Milk Rate
+        </h2>
+
+
+        <form
+            method="POST"
+            id="rateForm"
+        >
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+
+                <!-- FAT Rate -->
 
                 <div>
 
-                    <label class="block text-sm mb-1">
-                        FAT %
+                    <label
+                        for="fat_rate"
+                        class="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                        FAT Rate
                     </label>
 
                     <input
                         type="number"
-                        step="0.1"
-                        name="fat"
-                        required
-                        value="<?php
-                            echo $editRate
-                                ? htmlspecialchars($editRate['fat_value'])
-                                : '';
-                        ?>"
-                        class="w-full border rounded px-3 py-2"
+                        name="fat_rate"
+                        id="fat_rate"
+                        step="0.5"
+                        min="0.5"
+                        value="<?php echo e($fatRate); ?>"
+                        placeholder="8.50"
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
+
+                    <p
+                        id="fat-rate-error"
+                        class="text-red-600 text-sm mt-1"
+                    ></p>
 
                 </div>
 
 
+                <!-- SNF Rate -->
+
                 <div>
 
-                    <label class="block text-sm mb-1">
-                        SNF %
+                    <label
+                        for="snf_rate"
+                        class="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                        SNF Rate
                     </label>
 
                     <input
                         type="number"
-                        step="0.1"
-                        name="snf"
-                        required
-                        value="<?php
-                            echo $editRate
-                                ? htmlspecialchars($editRate['snf_value'])
-                                : '';
-                        ?>"
-                        class="w-full border rounded px-3 py-2"
+                        name="snf_rate"
+                        id="snf_rate"
+                        step="0.5"
+                        min="0.5"
+                        value="<?php echo e($snfRate); ?>"
+                        placeholder="4.00"
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
 
-                </div>
-
-
-                <div>
-
-                    <label class="block text-sm mb-1">
-                        Rate per Litre
-                    </label>
-
-                    <input
-                        type="number"
-                        step="0.01"
-                        name="rate"
-                        required
-                        value="<?php
-                            echo $editRate
-                                ? htmlspecialchars($editRate['rate_per_litre'])
-                                : '';
-                        ?>"
-                        class="w-full border rounded px-3 py-2"
-                    >
-
-                </div>
-
-
-                <div class="flex items-end gap-2">
-
-                    <button
-                        type="submit"
-                        name="<?php echo $editRate ? 'update_rate' : 'add_rate'; ?>"
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                    >
-                        <?php echo $editRate ? 'Update' : 'Add'; ?>
-                    </button>
-
-
-                    <?php if ($editRate): ?>
-
-                        <a
-                            href="rate-setting.php"
-                            class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
-                        >
-                            Cancel
-                        </a>
-
-                    <?php endif; ?>
+                    <p
+                        id="snf-rate-error"
+                        class="text-red-600 text-sm mt-1"
+                    ></p>
 
                 </div>
 
             </div>
 
+
+
+
+            <!-- Update Button -->
+
+            <div class="mt-6">
+
+                <button
+                    type="submit"
+                    name="update_milk_rate"
+                    class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+                >
+                    Update Milk Rate
+                </button>
+
+            </div>
+
         </form>
-
-
-        <!-- RATE TABLE -->
-
-        <div class="overflow-x-auto px-5 pb-5">
-
-            <?php if ($rates->num_rows > 0): ?>
-
-                <table class="w-full text-sm">
-
-                    <thead>
-
-                        <tr class="border-b text-left">
-
-                            <th class="py-3">ID</th>
-                            <th class="py-3">FAT</th>
-                            <th class="py-3">SNF</th>
-                            <th class="py-3">Rate</th>
-                            <th class="py-3">Action</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody>
-
-                        <?php while ($row = $rates->fetch_assoc()): ?>
-
-                            <tr class="border-b">
-
-                                <td class="py-3">
-                                    <?php echo $row['id']; ?>
-                                </td>
-
-                                <td class="py-3">
-                                    <?php echo $row['fat_value']; ?>%
-                                </td>
-
-                                <td class="py-3">
-                                    <?php echo $row['snf_value']; ?>%
-                                </td>
-
-                                <td class="py-3">
-                                    Rs. <?php echo number_format($row['rate_per_litre'], 2); ?>
-                                </td>
-
-                                <td class="py-3">
-
-                                    <a
-                                        href="rate-setting.php?edit_rate=<?php echo $row['id']; ?>"
-                                        class="text-blue-600 mr-3"
-                                    >
-                                        Edit
-                                    </a>
-
-
-                                    <form method="POST" class="inline">
-
-                                        <input
-                                            type="hidden"
-                                            name="rate_id"
-                                            value="<?php echo $row['id']; ?>"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="delete_rate"
-                                            class="text-red-600"
-                                            onclick="return confirm('Delete this rate?');"
-                                        >
-                                            Delete
-                                        </button>
-
-                                    </form>
-
-                                </td>
-
-                            </tr>
-
-                        <?php endwhile; ?>
-
-                    </tbody>
-
-                </table>
-
-            <?php else: ?>
-
-                <p class="text-gray-500 text-sm py-4">
-                    No milk rates found.
-                </p>
-
-            <?php endif; ?>
-
-        </div>
 
     </div>
 
 
-    <!-- DANA PRICE -->
+    <!-- Dana Price Section -->
 
-    <div class="bg-white border rounded-lg shadow-sm">
+    <div class="bg-white rounded-lg shadow p-6">
 
-        <div class="px-5 py-4 border-b">
+        <h2 class="text-lg font-semibold text-gray-800">
+            Dana Price
+        </h2>
 
-            <h2 class="font-semibold text-gray-800">
-                <?php echo $editDana ? 'Edit Dana Price' : 'Add Dana Price'; ?>
-            </h2>
-
-        </div>
+        <p class="text-sm text-gray-500 mt-1 mb-6">
+            Manage feed prices.
+        </p>
 
 
-        <form method="POST" class="p-5">
+        <!-- Add Dana -->
 
-            <?php if ($editDana): ?>
+        <form
+            method="POST"
+            id="danaForm"
+            class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8"
+        >
+
+
+            <!-- Item Name -->
+
+            <div>
+
+                <label
+                    for="item_name"
+                    class="block text-sm font-medium text-gray-700 mb-1"
+                >
+                    Item Name
+                </label>
 
                 <input
-                    type="hidden"
-                    name="dana_id"
-                    value="<?php echo $editDana['id']; ?>"
+                    type="text"
+                    name="item_name"
+                    id="item_name"
+                    placeholder="Example: Cow Feed"
+                    class="w-full border border-gray-300 rounded px-3 py-2"
                 >
 
-            <?php endif; ?>
+                <p
+                    id="item-name-error"
+                    class="text-red-600 text-sm mt-1"
+                ></p>
+
+            </div>
 
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Price -->
 
-                <div>
+            <div>
 
-                    <label class="block text-sm mb-1">
-                        Item Name
-                    </label>
+                <label
+                    for="price_per_unit"
+                    class="block text-sm font-medium text-gray-700 mb-1"
+                >
+                    Price Per Unit
+                </label>
 
-                    <input
-                        type="text"
-                        name="item_name"
-                        required
-                        value="<?php
-                            echo $editDana
-                                ? htmlspecialchars($editDana['item_name'])
-                                : '';
-                        ?>"
-                        class="w-full border rounded px-3 py-2"
-                    >
+                <input
+                    type="number"
+                    name="price_per_unit"
+                    id="price_per_unit"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="Example: 45.00"
+                    class="w-full border border-gray-300 rounded px-3 py-2"
+                >
 
-                </div>
+                <p
+                    id="price-error"
+                    class="text-red-600 text-sm mt-1"
+                ></p>
 
-
-                <div>
-
-                    <label class="block text-sm mb-1">
-                        Price per Kg
-                    </label>
-
-                    <input
-                        type="number"
-                        step="0.01"
-                        name="price"
-                        required
-                        value="<?php
-                            echo $editDana
-                                ? htmlspecialchars($editDana['price_per_unit'])
-                                : '';
-                        ?>"
-                        class="w-full border rounded px-3 py-2"
-                    >
-
-                </div>
+            </div>
 
 
-                <div class="flex items-end gap-2">
+            <!-- Add Button -->
 
-                    <button
-                        type="submit"
-                        name="<?php echo $editDana ? 'update_dana' : 'add_dana'; ?>"
-                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                    >
-                        <?php echo $editDana ? 'Update' : 'Add'; ?>
-                    </button>
+            <div class="flex items-end">
 
-
-                    <?php if ($editDana): ?>
-
-                        <a
-                            href="rate-setting.php"
-                            class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
-                        >
-                            Cancel
-                        </a>
-
-                    <?php endif; ?>
-
-                </div>
+                <button
+                    type="submit"
+                    name="add_dana"
+                    class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                >
+                    Add Dana Price
+                </button>
 
             </div>
 
         </form>
 
 
-        <!-- DANA TABLE -->
+        <!-- Dana List -->
 
-        <div class="overflow-x-auto px-5 pb-5">
+        <div class="overflow-x-auto">
 
-            <?php if ($danaPrices->num_rows > 0): ?>
+            <table class="w-full text-sm">
 
-                <table class="w-full text-sm">
+                <thead>
 
-                    <thead>
+                    <tr class="border-b bg-gray-50">
 
-                        <tr class="border-b text-left">
+                        <th class="text-left px-4 py-3">
+                            Item
+                        </th>
 
-                            <th class="py-3">ID</th>
-                            <th class="py-3">Item</th>
-                            <th class="py-3">Price</th>
-                            <th class="py-3">Action</th>
+                        <th class="text-left px-4 py-3">
+                            Price
+                        </th>
+
+                        <th class="text-left px-4 py-3">
+                            Effective From
+                        </th>
+
+                        <th class="text-left px-4 py-3">
+                            Action
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    <?php if (empty($danaPrices)): ?>
+
+                        <tr>
+
+                            <td
+                                colspan="4"
+                                class="text-center text-gray-500 py-6"
+                            >
+                                No dana prices found.
+                            </td>
 
                         </tr>
 
-                    </thead>
+                    <?php else: ?>
 
-
-                    <tbody>
-
-                        <?php while ($row = $danaPrices->fetch_assoc()): ?>
+                        <?php foreach ($danaPrices as $dana): ?>
 
                             <tr class="border-b">
 
-                                <td class="py-3">
-                                    <?php echo $row['id']; ?>
+                                <td class="px-4 py-3">
+                                    <?php echo e($dana['item_name']); ?>
                                 </td>
 
-                                <td class="py-3">
-                                    <?php echo htmlspecialchars($row['item_name']); ?>
+
+                                <td class="px-4 py-3">
+                                    Rs.
+                                    <?php echo number_format(
+                                        $dana['price_per_unit'],
+                                        2
+                                    ); ?>
                                 </td>
 
-                                <td class="py-3">
-                                    Rs. <?php echo number_format($row['price_per_unit'], 2); ?>
+
+                                <td class="px-4 py-3">
+                                    <?php echo e(
+                                        formatDate($dana['effective_from'])
+                                    ); ?>
                                 </td>
 
-                                <td class="py-3">
 
-                                    <a
-                                        href="rate-setting.php?edit_dana=<?php echo $row['id']; ?>"
-                                        class="text-blue-600 mr-3"
+                                <td class="px-4 py-3">
+
+                                    <form
+                                        method="POST"
+                                        class="flex items-center gap-2"
                                     >
-                                        Edit
-                                    </a>
-
-
-                                    <form method="POST" class="inline">
 
                                         <input
                                             type="hidden"
                                             name="dana_id"
-                                            value="<?php echo $row['id']; ?>"
+                                            value="<?php echo (int) $dana['id']; ?>"
                                         >
+
+
+                                        <input
+                                            type="number"
+                                            name="price_per_unit"
+                                            step="0.01"
+                                            min="0.01"
+                                            value="<?php echo e(
+                                                $dana['price_per_unit']
+                                            ); ?>"
+                                            class="w-28 border border-gray-300 rounded px-2 py-1"
+                                        >
+
 
                                         <button
                                             type="submit"
-                                            name="delete_dana"
-                                            class="text-red-600"
-                                            onclick="return confirm('Delete this dana price?');"
+                                            name="update_dana"
+                                            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
                                         >
-                                            Delete
+                                            Update
                                         </button>
 
                                     </form>
@@ -654,19 +623,13 @@ include __DIR__ . '/../includes/header.php';
 
                             </tr>
 
-                        <?php endwhile; ?>
+                        <?php endforeach; ?>
 
-                    </tbody>
+                    <?php endif; ?>
 
-                </table>
+                </tbody>
 
-            <?php else: ?>
-
-                <p class="text-gray-500 text-sm py-4">
-                    No dana prices found.
-                </p>
-
-            <?php endif; ?>
+            </table>
 
         </div>
 
@@ -675,4 +638,29 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<script src="<?php echo BASE_URL; ?>/assets/js/validate-rate-setting.js"></script>
+
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const successMessage =
+        document.getElementById('successMessage');
+
+    if (successMessage) {
+
+        setTimeout(function () {
+
+            successMessage.remove();
+
+        }, 3000);
+
+    }
+
+});
+
+</script>
+
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
