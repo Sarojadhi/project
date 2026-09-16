@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const password = document.getElementById('password');
     const fullName = document.getElementById('full_name');
 
-    const phonePrefix = document.getElementById('phone_prefix');
     const phoneNumber = document.getElementById('phone_number');
     const phone = document.getElementById('phone');
 
@@ -29,7 +28,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const action = actionInput ? actionInput.value : 'add';
 
     const isEdit = action === 'edit';
-
 
     // Password eye button
     const togglePassword =
@@ -60,7 +58,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
         });
-
 
         togglePassword.addEventListener('click', function (event) {
 
@@ -93,7 +90,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     }
 
-
     // Hide success/error message after 3 seconds
     const message = document.getElementById('message');
 
@@ -116,7 +112,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     }
 
-
     // Check username
     function checkUsername() {
 
@@ -126,8 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const value = username.value.trim();
 
-        const usernameRegex =/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/;
-
+        const usernameRegex = /^[A-Za-z ]+$/;
 
         if (value === '') {
 
@@ -137,21 +131,34 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
-        if (!usernameRegex.test(value)) {
+        if (value.length < 3) {
 
             usernameError.textContent =
-                'Username must start with a letter and contain 3 to 20 characters.';
+                'Username must be at least 3 characters.';
 
             return false;
         }
 
+        if (value.length > 20) {
+
+            usernameError.textContent =
+                'Username must be 20 characters or less.';
+
+            return false;
+        }
+
+        if (!usernameRegex.test(value)) {
+
+            usernameError.textContent =
+                'Username can contain letters and spaces only.';
+
+            return false;
+        }
 
         usernameError.textContent = '';
 
         return true;
     }
-
 
     // Check password
     function checkPassword() {
@@ -165,7 +172,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const passwordRegex =
             /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/;
 
-
         // Password is optional during Edit
         if (isEdit && value === '') {
 
@@ -173,7 +179,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return true;
         }
-
 
         // Password is required during Add
         if (value === '') {
@@ -184,7 +189,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
         if (!passwordRegex.test(value)) {
 
             passwordError.textContent =
@@ -193,12 +197,10 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
         passwordError.textContent = '';
 
         return true;
     }
-
 
     // Check full name
     function checkFullName() {
@@ -211,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const nameRegex = /^[A-Za-z ]+$/;
 
-
         if (value === '') {
 
             fullNameError.textContent =
@@ -220,15 +221,21 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
-        if (value.length < 2) {
+        if (value.length < 3) {
 
             fullNameError.textContent =
-                'Full name must be at least 2 characters.';
+                'Full name must be at least 3 characters.';
 
             return false;
         }
 
+        if (value.length > 100) {
+
+            fullNameError.textContent =
+                'Full name must be 100 characters or less.';
+
+            return false;
+        }
 
         if (!nameRegex.test(value)) {
 
@@ -238,18 +245,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
         fullNameError.textContent = '';
 
         return true;
     }
 
-
     // Check phone
     function checkPhone() {
 
         if (
-            !phonePrefix ||
             !phoneNumber ||
             !phone ||
             !phoneError
@@ -257,45 +261,51 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
-        const prefix = phonePrefix.value;
         const number = phoneNumber.value.trim();
-
-
-        if (prefix !== '97' && prefix !== '98') {
-
-            phoneError.textContent =
-                'Please select 97 or 98.';
-
-            return false;
-        }
-
 
         if (number === '') {
 
             phoneError.textContent =
-                'Please enter the remaining 8 digits.';
+                'Please enter a phone number.';
 
             return false;
         }
 
-
-        if (!/^\d{8}$/.test(number)) {
+        if (!/^\d+$/.test(number)) {
 
             phoneError.textContent =
-                'Phone number must contain exactly 8 digits.';
+                'Phone number can contain digits only.';
 
             return false;
         }
 
+        // Check 97 or 98 first
+        if (
+            number.length === 1 ||
+            (number.length >= 2 && !/^(97|98)/.test(number))
+        ) {
 
-        // Combine prefix and number
-        phone.value = prefix + number;
+            phoneError.textContent =
+                'Phone number must start with 97 or 98.';
+
+            return false;
+        }
+
+        // Check total length after prefix
+        if (number.length !== 10) {
+
+            phoneError.textContent =
+                'Phone number must contain exactly 10 digits.';
+
+            return false;
+        }
+
+        phone.value = number;
 
         phoneError.textContent = '';
 
         return true;
     }
-
 
     // Check address
     function checkAddress() {
@@ -306,7 +316,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const value = address.value.trim();
 
-
         if (value === '') {
 
             addressError.textContent =
@@ -314,7 +323,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
-
 
         if (value.length < 3) {
 
@@ -324,7 +332,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
         if (value.length > 200) {
 
             addressError.textContent =
@@ -333,12 +340,40 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+        // Allow letters, numbers, spaces, hyphen and comma
+        if (!/^[A-Za-z0-9 ,\-]+$/.test(value)) {
+
+            addressError.textContent =
+                'Address can contain letters, numbers, spaces, - and comma only.';
+
+            return false;
+        }
+
+        // Address must contain at least one letter
+        if (!/[A-Za-z]/.test(value)) {
+
+            addressError.textContent =
+                'Address must contain at least one letter.';
+
+            return false;
+        }
+
+        // Allow only one comma
+        const commaCount =
+            (value.match(/,/g) || []).length;
+
+        if (commaCount > 1) {
+
+            addressError.textContent =
+                'Address can contain only one comma.';
+
+            return false;
+        }
 
         addressError.textContent = '';
 
         return true;
     }
-
 
     // Check join date
     function checkJoinDate() {
@@ -352,14 +387,11 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
-
         if (!joinDate || !joinDateError) {
             return true;
         }
 
-
         const value = joinDate.value;
-
 
         if (value === '') {
 
@@ -368,7 +400,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return false;
         }
-
 
         const today = new Date();
 
@@ -380,10 +411,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const day =
             String(today.getDate()).padStart(2, '0');
 
-
         const todayDate =
             year + '-' + month + '-' + day;
-
 
         if (value !== todayDate) {
 
@@ -393,14 +422,12 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
-
         joinDateError.textContent = '';
 
         return true;
     }
 
-
-    // Allow only 8 phone digits
+    // Allow only 10 phone digits
     if (phoneNumber) {
 
         phoneNumber.addEventListener('input', function () {
@@ -408,7 +435,7 @@ document.addEventListener('DOMContentLoaded', function () {
             phoneNumber.value =
                 phoneNumber.value
                     .replace(/\D/g, '')
-                    .slice(0, 8);
+                    .slice(0, 10);
 
             checkPhone();
 
@@ -416,60 +443,80 @@ document.addEventListener('DOMContentLoaded', function () {
 
     }
 
-
     // Username validation
     if (username) {
+
         username.addEventListener(
             'blur',
             checkUsername
         );
-    }
 
+        username.addEventListener(
+            'input',
+            checkUsername
+        );
+    }
 
     // Password validation
     if (password) {
+
         password.addEventListener(
             'blur',
             checkPassword
         );
-    }
 
+        password.addEventListener(
+            'input',
+            checkPassword
+        );
+    }
 
     // Full name validation
     if (fullName) {
+
         fullName.addEventListener(
             'blur',
             checkFullName
         );
-    }
 
-
-    // Phone validation
-    if (phonePrefix) {
-        phonePrefix.addEventListener(
-            'change',
-            checkPhone
+        fullName.addEventListener(
+            'input',
+            checkFullName
         );
     }
 
+    // Phone validation
+    if (phoneNumber) {
+
+        phoneNumber.addEventListener(
+            'blur',
+            checkPhone
+        );
+
+    }
 
     // Address validation
     if (address) {
+
         address.addEventListener(
             'blur',
             checkAddress
         );
-    }
 
+        address.addEventListener(
+            'input',
+            checkAddress
+        );
+    }
 
     // Join date validation
     if (joinDate) {
+
         joinDate.addEventListener(
             'change',
             checkJoinDate
         );
     }
-
 
     // Validate form before submit
     form.addEventListener('submit', function (event) {
@@ -480,7 +527,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const validPhone = checkPhone();
         const validAddress = checkAddress();
         const validJoinDate = checkJoinDate();
-
 
         if (
             !validUsername ||

@@ -23,7 +23,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $password = $_POST['password'] ?? '';
         $fullName = trim($_POST['full_name'] ?? '');
 
-        $phonePrefix = $_POST['phone_prefix'] ?? '';
         $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
@@ -32,9 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         // Server-side validation
 
-        if (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+        if (
+            strlen($username) < 3 ||
+            strlen($username) > 20 ||
+            !preg_match('/^[A-Za-z ]+$/', $username)
+        ) {
 
-            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
+            $message = 'Username must contain only letters and spaces and be 3 to 20 characters.';
             $messageType = 'error';
 
         } elseif (
@@ -48,28 +51,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $messageType = 'error';
 
         } elseif (
-            strlen($fullName) < 2 ||
+            strlen($fullName) < 3 ||
+            strlen($fullName) > 100 ||
             !preg_match('/^[A-Za-z ]+$/', $fullName)
         ) {
 
-            $message = 'Full name must contain letters and spaces only.';
+            $message = 'Full name must contain letters and spaces only and be 3 to 100 characters.';
             $messageType = 'error';
 
         } elseif (
-            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
-            !preg_match('/^\d{8}$/', $phoneNumber)
+            !preg_match('/^9[78]\d{8}$/', $phoneNumber)
         ) {
 
-            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $message = 'Phone number must start with 97 or 98 and contain exactly 10 digits.';
             $messageType = 'error';
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200 ||
-            !preg_match('/^[A-Za-z ]+$/', $address)
+            strlen($address) > 200
         ) {
 
-            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
+            $message = 'Address must be at least 3 characters and 200 characters or less.';
             $messageType = 'error';
 
         } elseif ($joinDate !== date('Y-m-d')) {
@@ -79,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         } else {
 
-            $phone = $phonePrefix . $phoneNumber;
+            $phone = $phoneNumber;
 
             $hashedPassword = password_hash(
                 $password,
@@ -163,7 +165,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $password = $_POST['password'] ?? '';
         $fullName = trim($_POST['full_name'] ?? '');
 
-        $phonePrefix = $_POST['phone_prefix'] ?? '';
         $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
@@ -177,9 +178,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $message = 'Invalid farmer.';
             $messageType = 'error';
 
-        } elseif (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+        } elseif (
+            strlen($username) < 3 ||
+            strlen($username) > 20 ||
+            !preg_match('/^[A-Za-z ]+$/', $username)
+        ) {
 
-            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
+            $message = 'Username must contain only letters and spaces and be 3 to 20 characters.';
             $messageType = 'error';
 
         } elseif (
@@ -194,28 +199,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $messageType = 'error';
 
         } elseif (
-            strlen($fullName) < 2 ||
+            strlen($fullName) < 3 ||
+            strlen($fullName) > 100 ||
             !preg_match('/^[A-Za-z ]+$/', $fullName)
         ) {
 
-            $message = 'Full name must contain letters and spaces only.';
+            $message = 'Full name must contain letters and spaces only and be 3 to 100 characters.';
             $messageType = 'error';
 
         } elseif (
-            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
-            !preg_match('/^\d{8}$/', $phoneNumber)
+            !preg_match('/^9[78]\d{8}$/', $phoneNumber)
         ) {
 
-            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $message = 'Phone number must start with 97 or 98 and contain exactly 10 digits.';
             $messageType = 'error';
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200 ||
-            !preg_match('/^[A-Za-z ]+$/', $address)
+            strlen($address) > 200
         ) {
 
-            $message = 'Address must contain only letters and spaces and be at least 3 characters.';
+            $message = 'Address must be at least 3 characters and 200 characters or less.';
             $messageType = 'error';
 
         } elseif ($joinDate === '') {
@@ -225,7 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         } else {
 
-            $phone = $phonePrefix . $phoneNumber;
+            $phone = $phoneNumber;
 
 
             // Find farmer
@@ -472,28 +476,6 @@ if (isset($_GET['edit'])) {
 }
 
 
-// Prepare phone values for edit
-
-$editPhonePrefix = '';
-$editPhoneNumber = '';
-
-if ($editFarmer && !empty($editFarmer['phone'])) {
-
-    $editPhone = $editFarmer['phone'];
-
-    if (substr($editPhone, 0, 2) === '97') {
-
-        $editPhonePrefix = '97';
-        $editPhoneNumber = substr($editPhone, 2);
-
-    } elseif (substr($editPhone, 0, 2) === '98') {
-
-        $editPhonePrefix = '98';
-        $editPhoneNumber = substr($editPhone, 2);
-    }
-}
-
-
 // Get all farmers
 
 $sql = "SELECT
@@ -541,6 +523,22 @@ include __DIR__ . '/../includes/header.php';
     <!-- Add / Edit Farmer -->
 
     <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+
+        <?php if ($editFarmer): ?>
+
+            <div class="mb-4">
+
+                <a
+                    href="<?php echo BASE_URL; ?>/admin/manage-farmer.php"
+                    class="text-blue-600 hover:underline"
+                >
+                    ← Back Add Farmer
+                </a>
+
+            </div>
+
+        <?php endif; ?>
+
 
         <h2 class="text-lg font-semibold text-gray-800 mb-4">
 
@@ -606,6 +604,8 @@ include __DIR__ . '/../includes/header.php';
                                 ? e($editFarmer['username'])
                                 : '';
                         ?>"
+                        minlength="3"
+                        maxlength="20"
                         placeholder="Enter username"
                         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
@@ -696,6 +696,8 @@ include __DIR__ . '/../includes/header.php';
                                 ? e($editFarmer['full_name'])
                                 : '';
                         ?>"
+                        minlength="3"
+                        maxlength="100"
                         placeholder="Enter full name"
                         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
@@ -713,56 +715,28 @@ include __DIR__ . '/../includes/header.php';
                 <div>
 
                     <label
+                        for="phone_number"
                         class="block text-sm font-medium text-gray-700 mb-1"
                     >
                         Phone
                     </label>
 
-                    <div class="flex gap-2">
-
-                        <select
-                            id="phone_prefix"
-                            name="phone_prefix"
-                            class="w-20 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
-                        >
-
-                            <option
-                                value="98"
-                                <?php
-                                echo $editPhonePrefix === '98'
-                                    ? 'selected'
-                                    : '';
-                                ?>
-                            >
-                                98
-                            </option>
-
-                            <option
-                                value="97"
-                                <?php
-                                echo $editPhonePrefix === '97'
-                                    ? 'selected'
-                                    : '';
-                                ?>
-                            >
-                                97
-                            </option>
-
-                        </select>
-
-                        <input
-                            type="text"
-                            id="phone_number"
-                            name="phone_number"
-                            value="<?php echo e($editPhoneNumber); ?>"
-                            maxlength="8"
-                            inputmode="numeric"
-                            autocomplete="tel"
-                            placeholder="12345678"
-                            class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
-                        >
-
-                    </div>
+                    <input
+                        type="text"
+                        id="phone_number"
+                        name="phone_number"
+                        value="<?php
+                            echo $editFarmer
+                                ? e($editFarmer['phone'])
+                                : '';
+                        ?>"
+                        maxlength="10"
+                        minlength="10"
+                        inputmode="numeric"
+                        autocomplete="tel"
+                        placeholder="98XXXXXXXX"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                    >
 
                     <input
                         type="hidden"
@@ -805,7 +779,7 @@ include __DIR__ . '/../includes/header.php';
                         ?>"
                         minlength="3"
                         maxlength="200"
-                        placeholder="Enter address"
+                        placeholder="Enter your address"
                         class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
                     >
 

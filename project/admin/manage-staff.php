@@ -23,7 +23,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
         $fullName = trim($_POST['full_name'] ?? '');
 
-        $phonePrefix = $_POST['phone_prefix'] ?? '';
         $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
@@ -32,9 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validation
 
-        if (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+        if (
+            !preg_match('/^[A-Za-z ]+$/', $username) ||
+            strlen($username) < 3 ||
+            strlen($username) > 20
+        ) {
 
-            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
+            $message = 'Username must be at least 3 characters and contain letters and spaces only.';
             $messageType = 'error';
 
         } elseif (
@@ -48,27 +51,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
 
         } elseif (
-            strlen($fullName) < 2 ||
+            strlen($fullName) < 3 ||
+            strlen($fullName) > 100 ||
             !preg_match('/^[A-Za-z ]+$/', $fullName)
         ) {
 
-            $message = 'Full name must contain letters and spaces only.';
+            $message = 'Full name must be at least 3 characters and contain letters and spaces only.';
             $messageType = 'error';
 
         } elseif (
-            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
-            !preg_match('/^\d{8}$/', $phoneNumber)
+            !preg_match('/^\d{10}$/', $phoneNumber) ||
+            !preg_match('/^(97|98)/', $phoneNumber)
         ) {
 
-            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $message = 'Phone number must contain exactly 10 digits and start with 97 or 98.';
             $messageType = 'error';
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200
+            strlen($address) > 200 ||
+            !preg_match('/^[A-Za-z0-9 ,\-]+$/', $address) ||
+            !preg_match('/[A-Za-z]/', $address) ||
+            substr_count($address, ',') > 1
         ) {
 
-            $message = 'Address must be between 3 and 200 characters.';
+            $message = 'Address must be at least 3 characters, contain at least one letter, and can contain letters, numbers, spaces, - and only one comma.';
             $messageType = 'error';
 
         } elseif ($joinDate !== date('Y-m-d')) {
@@ -78,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } else {
 
-            $phone = $phonePrefix . $phoneNumber;
+            $phone = $phoneNumber;
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
             $conn->begin_transaction();
@@ -155,7 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
         $fullName = trim($_POST['full_name'] ?? '');
 
-        $phonePrefix = $_POST['phone_prefix'] ?? '';
         $phoneNumber = trim($_POST['phone_number'] ?? '');
 
         $address = trim($_POST['address'] ?? '');
@@ -168,9 +174,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Invalid staff.';
             $messageType = 'error';
 
-        } elseif (!preg_match('/^[A-Za-z][A-Za-z0-9_ ]{2,19}$/', $username)) {
+        } elseif (
+            !preg_match('/^[A-Za-z ]+$/', $username) ||
+            strlen($username) < 3 ||
+            strlen($username) > 20
+        ) {
 
-            $message = 'Username must start with a letter and contain 3 to 20 characters. Spaces are allowed.';
+            $message = 'Username must be at least 3 characters and contain letters and spaces only.';
             $messageType = 'error';
 
         } elseif (
@@ -185,32 +195,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
 
         } elseif (
-            strlen($fullName) < 2 ||
+            strlen($fullName) < 3 ||
+            strlen($fullName) > 100 ||
             !preg_match('/^[A-Za-z ]+$/', $fullName)
         ) {
 
-            $message = 'Full name must contain letters and spaces only.';
+            $message = 'Full name must be at least 3 characters and contain letters and spaces only.';
             $messageType = 'error';
 
         } elseif (
-            ($phonePrefix !== '97' && $phonePrefix !== '98') ||
-            !preg_match('/^\d{8}$/', $phoneNumber)
+            !preg_match('/^\d{10}$/', $phoneNumber) ||
+            !preg_match('/^(97|98)/', $phoneNumber)
         ) {
 
-            $message = 'Phone number must be 97 or 98 followed by exactly 8 digits.';
+            $message = 'Phone number must contain exactly 10 digits and start with 97 or 98.';
             $messageType = 'error';
 
         } elseif (
             strlen($address) < 3 ||
-            strlen($address) > 200
+            strlen($address) > 200 ||
+            !preg_match('/^[A-Za-z0-9 ,\-]+$/', $address) ||
+            !preg_match('/[A-Za-z]/', $address) ||
+            substr_count($address, ',') > 1
         ) {
 
-            $message = 'Address must be between 3 and 200 characters.';
+            $message = 'Address must be at least 3 characters, contain at least one letter, and can contain letters, numbers, spaces, - and only one comma.';
             $messageType = 'error';
 
         } else {
 
-            $phone = $phonePrefix . $phoneNumber;
+            $phone = $phoneNumber;
 
 
             // Get original staff record
@@ -451,27 +465,6 @@ if (isset($_GET['edit'])) {
 }
 
 
-// Prepare phone values
-$editPhonePrefix = '';
-$editPhoneNumber = '';
-
-if ($editStaff && !empty($editStaff['phone'])) {
-
-    $editPhone = $editStaff['phone'];
-
-    if (substr($editPhone, 0, 2) === '97') {
-
-        $editPhonePrefix = '97';
-        $editPhoneNumber = substr($editPhone, 2);
-
-    } elseif (substr($editPhone, 0, 2) === '98') {
-
-        $editPhonePrefix = '98';
-        $editPhoneNumber = substr($editPhone, 2);
-    }
-}
-
-
 // Get all staff
 $staffList = $conn->query(
     "SELECT
@@ -677,61 +670,38 @@ include __DIR__ . '/../includes/header.php';
                 <div>
 
                     <label
+                        for="phone_number"
                         class="block text-sm font-medium text-gray-700 mb-1"
                     >
                         Phone
                     </label>
 
-                    <div class="flex gap-2">
-
-                        <select
-                            id="phone_prefix"
-                            name="phone_prefix"
-                            class="w-20 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
-                        >
-
-                            <option
-                                value="98"
-                                <?php
-                                echo $editPhonePrefix === '98'
-                                    ? 'selected'
-                                    : '';
-                                ?>
-                            >
-                                98
-                            </option>
-
-                            <option
-                                value="97"
-                                <?php
-                                echo $editPhonePrefix === '97'
-                                    ? 'selected'
-                                    : '';
-                                ?>
-                            >
-                                97
-                            </option>
-
-                        </select>
-
-                        <input
-                            type="text"
-                            id="phone_number"
-                            name="phone_number"
-                            value="<?php echo e($editPhoneNumber); ?>"
-                            maxlength="8"
-                            inputmode="numeric"
-                            placeholder="12345678"
-                            class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
-                        >
-
-                    </div>
+                    <input
+                        type="text"
+                        id="phone_number"
+                        name="phone_number"
+                        value="<?php
+                            echo $editStaff
+                                ? e($editStaff['phone'])
+                                : '';
+                        ?>"
+                        maxlength="10"
+                        minlength="10"
+                        inputmode="numeric"
+                        autocomplete="tel"
+                        placeholder="98XXXXXXXX"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+                    >
 
                     <input
                         type="hidden"
                         id="phone"
                         name="phone"
-                        value=""
+                        value="<?php
+                            echo $editStaff
+                                ? e($editStaff['phone'])
+                                : '';
+                        ?>"
                     >
 
                     <span
