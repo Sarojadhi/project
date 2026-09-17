@@ -1,5 +1,7 @@
 <?php
 
+date_default_timezone_set('Asia/Kathmandu');
+
 require_once __DIR__ . '/../includes/auth.php';
 requireRole('staff');
 
@@ -10,6 +12,35 @@ $message = '';
 $messageType = '';
 
 $userId = (int) $_SESSION['user_id'];
+$today = date('Y-m-d');
+$currentHour = (int) date('H');
+
+
+// Set default shift from Nepal local time
+$defaultShift = $currentHour < 12 ? 'morning' : 'evening';
+
+
+// Get current milk rates
+$fatRate = 8.50;
+$snfRate = 4.00;
+
+$stmt = $conn->prepare(
+    "SELECT fat_rate, snf_rate
+     FROM milk_rate_settings
+     ORDER BY id DESC
+     LIMIT 1"
+);
+
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+if ($row = $result->fetch_assoc()) {
+    $fatRate = (float) $row['fat_rate'];
+    $snfRate = (float) $row['snf_rate'];
+}
+
+$stmt->close();
 
 
 // Save milk entry
@@ -22,122 +53,142 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     $fat = (float) ($_POST['fat'] ?? 0);
     $snf = (float) ($_POST['snf'] ?? 0);
 
-    $today = date('Y-m-d');
 
-
-    // Check farmer
+    // Validate farmer
     if ($farmerId <= 0) {
 
         $message = 'Please select a farmer.';
         $messageType = 'error';
 
 
-    // Check date
-    } elseif ($entryDate === '') {
+    // Validate date
+    } elseif ($entryDate !== $today) {
 
-        $message = 'Please select a date.';
+        $message = 'Only today\'s date is allowed.';
         $messageType = 'error';
 
 
-    } elseif ($entryDate > $today) {
-
-        $message = 'Date cannot be in the future.';
-        $messageType = 'error';
-
-
-    // Check shift
+    // Validate shift
     } elseif ($shift !== 'morning' && $shift !== 'evening') {
 
         $message = 'Invalid shift.';
         $messageType = 'error';
 
 
-    // Check litres
+    // Validate litres
     } elseif ($litre <= 0) {
 
         $message = 'Litres must be greater than 0.';
         $messageType = 'error';
 
 
-    // Check FAT
-    } elseif ($fat <= 0 || $fat > 10) {
+    // Validate FAT
+    } elseif ($fat <= 1.6 || $fat >= 8) {
 
-        $message = 'FAT must be between 0 and 10.';
+        $message = 'FAT must be greater than 1.6 and less than 8.';
         $messageType = 'error';
 
 
-    // Check SNF
-    } elseif ($snf <= 0 || $snf > 15) {
+    // Validate SNF
+    } elseif ($snf <= 3 || $snf >= 9) {
 
-        $message = 'SNF must be between 0 and 15.';
+        $message = 'SNF must be greater than 3 and less than 9.';
         $messageType = 'error';
 
 
     } else {
 
-        /*
-         * Current project rate calculation.
-         * FAT × SNF
-         */
-        $rate = $fat * $snf;
-        $amount = $rate * $litre;
-
-
-        // Save milk entry
+        // Check that farmer is active
         $stmt = $conn->prepare(
-            "INSERT INTO milk_entries
-            (
-                farmer_id,
-                entry_date,
-                shift,
-                litre,
-                fat,
-                snf,
-                rate_applied,
-                amount,
-                entered_by
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "SELECT f.id
+             FROM farmers f
+             JOIN users u ON f.user_id = u.id
+             WHERE f.id = ?
+             AND f.status = 'active'
+             AND u.status = 'active'"
         );
 
-        $stmt->bind_param(
-            'issdddddi',
-            $farmerId,
-            $entryDate,
-            $shift,
-            $litre,
-            $fat,
-            $snf,
-            $rate,
-            $amount,
-            $userId
-        );
+        $stmt->bind_param('i', $farmerId);
+        $stmt->execute();
+
+        $farmerResult = $stmt->get_result();
+
+        $farmerExists = $farmerResult->num_rows === 1;
+
+        $stmt->close();
 
 
-        if ($stmt->execute()) {
+        if (!$farmerExists) {
 
-            $message = 'Milk entry saved successfully.';
-            $messageType = 'success';
+            $message = 'Selected farmer is not active.';
+            $messageType = 'error';
 
         } else {
 
-            if ($stmt->errno == 1062) {
+            // Calculate milk rate
+            $rate = ($fat * $fatRate) + ($snf * $snfRate);
 
-                $message =
-                    "Duplicate: this farmer already has a $shift entry on $entryDate.";
+            $amount = $rate * $litre;
+
+
+            // Save milk entry
+            $stmt = $conn->prepare(
+                "INSERT INTO milk_entries
+                (
+                    farmer_id,
+                    entry_date,
+                    shift,
+                    litre,
+                    fat,
+                    snf,
+                    rate_applied,
+                    amount,
+                    entered_by
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+
+            $stmt->bind_param(
+                'issdddddi',
+                $farmerId,
+                $entryDate,
+                $shift,
+                $litre,
+                $fat,
+                $snf,
+                $rate,
+                $amount,
+                $userId
+            );
+
+
+            if ($stmt->execute()) {
+
+                $message = 'Milk entry saved successfully.';
+                $messageType = 'success';
 
             } else {
 
-                $message = 'Failed to save entry.';
+                if ($stmt->errno == 1062) {
+
+                    $message =
+                        "Duplicate: this farmer already has a $shift entry today.";
+
+                } else {
+
+                    $message = 'Failed to save entry.';
+                }
+
+                $messageType = 'error';
             }
 
-            $messageType = 'error';
+            $stmt->close();
         }
     }
 }
 
 
-// Active farmer list
+// Get active farmers
 $farmerList = $conn->query(
     "SELECT
         f.id,
@@ -150,7 +201,7 @@ $farmerList = $conn->query(
 );
 
 
-// Recent milk entries
+// Get recent milk entries
 $stmt = $conn->prepare(
     "SELECT
         m.entry_date,
@@ -158,13 +209,15 @@ $stmt = $conn->prepare(
         m.litre,
         m.fat,
         m.snf,
+        m.rate_applied,
+        m.amount,
         u.full_name AS farmer_name
      FROM milk_entries m
      JOIN farmers f ON m.farmer_id = f.id
      JOIN users u ON f.user_id = u.id
      WHERE m.entered_by = ?
      ORDER BY m.id DESC
-     LIMIT 5"
+     LIMIT 10"
 );
 
 $stmt->bind_param('i', $userId);
@@ -172,10 +225,9 @@ $stmt->execute();
 
 $recentList = $stmt->get_result();
 
-
-include __DIR__ . '/../includes/header.php';
-
 ?>
+
+<?php require_once __DIR__ . '/../includes/header.php'; ?>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
 
@@ -187,7 +239,7 @@ include __DIR__ . '/../includes/header.php';
         </h1>
 
         <p class="text-gray-500 mt-1">
-            Record daily milk collection.
+            Record today's milk collection.
         </p>
 
     </div>
@@ -196,24 +248,25 @@ include __DIR__ . '/../includes/header.php';
     <!-- Message -->
     <?php if ($message !== ''): ?>
 
-        <div class="mb-4 p-4 rounded-lg
+        <div
+            id="message"
+            class="mb-4 p-4 rounded-lg
             <?php
             echo $messageType === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
                 : 'bg-red-50 border border-red-200 text-red-700';
-            ?>">
-
+            ?>"
+        >
             <?php echo e($message); ?>
-
         </div>
 
     <?php endif; ?>
 
 
-    <!-- Milk Entry Form -->
-    <div class="bg-white border rounded-lg mb-6">
+    <!-- Milk entry form -->
+    <div class="bg-white border border-gray-200 rounded-lg mb-6">
 
-        <div class="px-5 py-4 border-b">
+        <div class="px-5 py-4 border-b border-gray-200">
 
             <h2 class="font-semibold text-gray-800">
                 New Milk Entry
@@ -231,36 +284,34 @@ include __DIR__ . '/../includes/header.php';
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
 
                 <!-- Farmer -->
-                <div>
+                <div class="relative">
 
                     <label
-                        for="farmer_id"
+                        for="farmer_search"
                         class="block text-sm font-medium text-gray-700 mb-1"
                     >
                         Farmer
                     </label>
 
-                    <select
-                        name="farmer_id"
-                        id="farmer_id"
+                    <input
+                        type="text"
+                        id="farmer_search"
+                        autocomplete="off"
+                        placeholder="Type farmer name..."
                         class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                     >
 
-                        <option value="0">
-                            -- Select Farmer --
-                        </option>
+                    <input
+                        type="hidden"
+                        name="farmer_id"
+                        id="farmer_id"
+                        value=""
+                    >
 
-                        <?php while ($farmer = $farmerList->fetch_assoc()): ?>
-
-                            <option
-                                value="<?php echo $farmer['id']; ?>"
-                            >
-                                <?php echo e($farmer['full_name']); ?>
-                            </option>
-
-                        <?php endwhile; ?>
-
-                    </select>
+                    <div
+                        id="farmer-suggestions"
+                        class="absolute z-20 left-0 right-0 bg-white border border-gray-300 rounded-lg mt-1 hidden max-h-52 overflow-y-auto shadow"
+                    ></div>
 
                     <span
                         id="farmer-error"
@@ -281,12 +332,17 @@ include __DIR__ . '/../includes/header.php';
                     </label>
 
                     <input
-                        type="date"
-                        name="entry_date"
+                        type="text"
                         id="entry_date"
-                        value="<?php echo date('Y-m-d'); ?>"
-                        max="<?php echo date('Y-m-d'); ?>"
-                        class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                        value="<?php echo date('d-M-Y'); ?>"
+                        readonly
+                        class="w-full border border-gray-300 rounded-lg p-3 bg-gray-100 text-gray-700 cursor-not-allowed"
+                    >
+
+                    <input
+                        type="hidden"
+                        name="entry_date"
+                        value="<?php echo $today; ?>"
                     >
 
                     <span
@@ -313,11 +369,17 @@ include __DIR__ . '/../includes/header.php';
                         class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                     >
 
-                        <option value="morning">
+                        <option
+                            value="morning"
+                            <?php echo $defaultShift === 'morning' ? 'selected' : ''; ?>
+                        >
                             Morning
                         </option>
 
-                        <option value="evening">
+                        <option
+                            value="evening"
+                            <?php echo $defaultShift === 'evening' ? 'selected' : ''; ?>
+                        >
                             Evening
                         </option>
 
@@ -338,11 +400,11 @@ include __DIR__ . '/../includes/header.php';
 
                     <input
                         type="number"
-                        step="0.01"
-                        min="0.01"
+                        step="0.1"
+                        min="0.1"
                         name="litre"
                         id="litre"
-                        placeholder="e.g. 5.50"
+                        placeholder="e.g. 5.5"
                         class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                     >
 
@@ -367,11 +429,11 @@ include __DIR__ . '/../includes/header.php';
                     <input
                         type="number"
                         step="0.1"
-                        min="0.1"
-                        max="10"
+                        min="1.7"
+                        max="7.9"
                         name="fat"
                         id="fat"
-                        placeholder="e.g. 4.0"
+                        value="4.0"
                         class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                     >
 
@@ -396,11 +458,11 @@ include __DIR__ . '/../includes/header.php';
                     <input
                         type="number"
                         step="0.1"
-                        min="0.1"
-                        max="15"
+                        min="3.1"
+                        max="8.9"
                         name="snf"
                         id="snf"
-                        placeholder="e.g. 9.0"
+                        value="9.0"
                         class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                     >
 
@@ -408,6 +470,63 @@ include __DIR__ . '/../includes/header.php';
                         id="snf-error"
                         class="text-sm text-red-600"
                     ></span>
+
+                </div>
+
+            </div>
+
+
+            <!-- Rate preview -->
+            <div class="mt-5 bg-gray-50 border border-gray-200 rounded-lg p-5">
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                    <div>
+
+                        <p class="text-xs text-gray-500">
+                            Rate Per Litre
+                        </p>
+
+                        <p
+                            id="rate-preview"
+                            class="text-xl font-bold text-gray-800 mt-1"
+                        >
+                            Rs. 70.00
+                        </p>
+
+                    </div>
+
+
+                    <div>
+
+                        <p class="text-xs text-gray-500">
+                            Litres
+                        </p>
+
+                        <p
+                            id="litre-preview"
+                            class="text-xl font-bold text-gray-800 mt-1"
+                        >
+                            0.0 L
+                        </p>
+
+                    </div>
+
+
+                    <div>
+
+                        <p class="text-xs text-gray-500">
+                            Total Amount
+                        </p>
+
+                        <p
+                            id="amount-preview"
+                            class="text-xl font-bold text-green-600 mt-1"
+                        >
+                            Rs. 0.00
+                        </p>
+
+                    </div>
 
                 </div>
 
@@ -427,6 +546,7 @@ include __DIR__ . '/../includes/header.php';
 
                 <button
                     type="reset"
+                    id="resetButton"
                     class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-6 rounded-lg"
                 >
                     Reset
@@ -439,17 +559,25 @@ include __DIR__ . '/../includes/header.php';
     </div>
 
 
-    <!-- Recent Entries -->
-    <div class="bg-white border rounded-lg overflow-hidden">
+    <!-- Recent entries -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
 
-        <div class="px-5 py-4 border-b flex justify-between items-center">
+        <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
 
-            <h2 class="font-semibold text-gray-800">
-                Your Recent Entries
-            </h2>
+            <div>
+
+                <h2 class="font-semibold text-gray-800">
+                    Your Recent Entries
+                </h2>
+
+                <p class="text-sm text-gray-500 mt-1">
+                    Your latest 10 milk entries.
+                </p>
+
+            </div>
 
             <span class="text-sm text-gray-500">
-                Last 5
+                Last 10
             </span>
 
         </div>
@@ -466,7 +594,7 @@ include __DIR__ . '/../includes/header.php';
                         <tr>
 
                             <th class="px-4 py-3 text-left">
-                                Date
+                                S.N.
                             </th>
 
                             <th class="px-4 py-3 text-left">
@@ -478,15 +606,15 @@ include __DIR__ . '/../includes/header.php';
                             </th>
 
                             <th class="px-4 py-3 text-right">
-                                Litres
+                                Ltr
                             </th>
 
                             <th class="px-4 py-3 text-right">
-                                FAT
+                                Rate/Ltr
                             </th>
 
                             <th class="px-4 py-3 text-right">
-                                SNF
+                                Total Rs.
                             </th>
 
                         </tr>
@@ -496,35 +624,41 @@ include __DIR__ . '/../includes/header.php';
 
                     <tbody class="divide-y">
 
+                        <?php $serialNumber = 1; ?>
+
                         <?php while ($row = $recentList->fetch_assoc()): ?>
 
                             <tr class="hover:bg-gray-50">
 
                                 <td class="px-4 py-3 text-gray-600">
-                                    <?php echo formatDate($row['entry_date']); ?>
+                                    <?php echo $serialNumber; ?>
                                 </td>
 
-                                <td class="px-4 py-3 font-medium">
+                                <td class="px-4 py-3 font-medium text-gray-800">
                                     <?php echo e($row['farmer_name']); ?>
                                 </td>
 
-                                <td class="px-4 py-3 text-center">
+                                <td class="px-4 py-3 text-center text-gray-600">
                                     <?php echo e(ucfirst($row['shift'])); ?>
                                 </td>
 
-                                <td class="px-4 py-3 text-right font-semibold">
-                                    <?php echo number_format($row['litre'], 2); ?>
+                                <td class="px-4 py-3 text-right text-gray-700">
+                                    <?php echo number_format((float) $row['litre'], 1); ?>
                                 </td>
 
-                                <td class="px-4 py-3 text-right">
-                                    <?php echo number_format($row['fat'], 1); ?>
+                                <td class="px-4 py-3 text-right text-gray-700">
+                                    Rs.
+                                    <?php echo number_format((float) $row['rate_applied'], 2); ?>
                                 </td>
 
-                                <td class="px-4 py-3 text-right">
-                                    <?php echo number_format($row['snf'], 1); ?>
+                                <td class="px-4 py-3 text-right font-semibold text-gray-800">
+                                    Rs.
+                                    <?php echo number_format((float) $row['amount'], 2); ?>
                                 </td>
 
                             </tr>
+
+                            <?php $serialNumber++; ?>
 
                         <?php endwhile; ?>
 
@@ -547,6 +681,29 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 
-<script src="<?php echo BASE_URL; ?>/assets/js/validate-milk.js"></script>
+<script>
+
+    const milkFatRate = <?php echo json_encode($fatRate); ?>;
+    const milkSnfRate = <?php echo json_encode($snfRate); ?>;
+
+</script>
+
+<script src="<?php echo BASE_URL; ?>/assets/js/validate-milk-entry.js"></script>
+
+
+<script>
+
+    const message = document.getElementById('message');
+
+    if (message) {
+
+        setTimeout(function () {
+            message.style.display = 'none';
+        }, 3000);
+
+    }
+
+</script>
+
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
