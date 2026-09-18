@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
+    // Form fields
     const farmerSearch = document.getElementById('farmer_search');
     const farmerId = document.getElementById('farmer_id');
     const farmerSuggestions = document.getElementById('farmer-suggestions');
@@ -17,347 +18,437 @@ document.addEventListener('DOMContentLoaded', function () {
     const fat = document.getElementById('fat');
     const snf = document.getElementById('snf');
 
+
+    // Error fields
     const farmerError = document.getElementById('farmer-error');
     const dateError = document.getElementById('date-error');
     const litreError = document.getElementById('litre-error');
     const fatError = document.getElementById('fat-error');
     const snfError = document.getElementById('snf-error');
 
+
+    // Price fields
     const ratePreview = document.getElementById('rate-preview');
-    const litrePreview = document.getElementById('litre-preview');
     const amountPreview = document.getElementById('amount-preview');
 
+
+    // Reset button
     const resetButton = document.getElementById('resetButton');
 
 
-    if (
-        !farmerSearch ||
-        !farmerId ||
-        !farmerSuggestions ||
-        !date ||
-        !shift ||
-        !litre ||
-        !fat ||
-        !snf
-    ) {
-        return;
-    }
+    // PHP farmer data
+    const farmers = Array.isArray(window.milkFarmers)
+        ? window.milkFarmers
+        : [];
 
 
-    // Store farmer names and IDs
-    const farmers = [
-
-        <?php
-        /*
-         * This section is not executed because this file is external JavaScript.
-         * Farmer data is loaded below from a PHP-created global variable.
-         */
-        ?>
-
-    ];
+    // PHP previous FAT/SNF data
+    const previousValues =
+        window.previousMilkValues || {};
 
 
-    // Use farmer data created by PHP
-    const farmerData = window.milkFarmers || [];
+    // PHP milk rates
+    const fatRate = Number(
+        window.milkRates?.fatRate ?? 8.50
+    );
+
+    const snfRate = Number(
+        window.milkRates?.snfRate ?? 4.00
+    );
 
 
-    // Store separate FAT/SNF values for each shift
-    const shiftValues = {
-        morning: {
-            fat: 4.0,
-            snf: 9.0
-        },
-        evening: {
-            fat: 4.0,
-            snf: 9.0
-        }
-    };
+    // Track keyboard selected suggestion
+    let currentMatches = [];
 
-
-    // Load saved shift values
-    try {
-
-        const savedValues = JSON.parse(
-            localStorage.getItem('milkShiftValues')
-        );
-
-        if (savedValues) {
-
-            if (savedValues.morning) {
-                shiftValues.morning = savedValues.morning;
-            }
-
-            if (savedValues.evening) {
-                shiftValues.evening = savedValues.evening;
-            }
-
-        }
-
-    } catch (error) {
-        // Use default values
-    }
-
-
-    // Save shift values
-    function saveShiftValues() {
-
-        localStorage.setItem(
-            'milkShiftValues',
-            JSON.stringify(shiftValues)
-        );
-
-    }
-
-
-    // Load FAT/SNF for selected shift
-    function loadShiftValues() {
-
-        const selectedShift = shift.value;
-
-        fat.value = Number(
-            shiftValues[selectedShift].fat
-        ).toFixed(1);
-
-        snf.value = Number(
-            shiftValues[selectedShift].snf
-        ).toFixed(1);
-
-        calculateAmount();
-
-    }
-
-
-    // Save current FAT/SNF for selected shift
-    function saveCurrentShiftValues() {
-
-        const selectedShift = shift.value;
-
-        const fatValue = parseFloat(fat.value);
-        const snfValue = parseFloat(snf.value);
-
-        if (!isNaN(fatValue)) {
-            shiftValues[selectedShift].fat = fatValue;
-        }
-
-        if (!isNaN(snfValue)) {
-            shiftValues[selectedShift].snf = snfValue;
-        }
-
-        saveShiftValues();
-
-    }
+    let highlightedIndex = -1;
 
 
     // Search farmers
     function showFarmerSuggestions() {
 
-        const searchValue = farmerSearch.value
-            .trim()
-            .toLowerCase();
+        const searchValue =
+            farmerSearch.value.trim().toLowerCase();
+
 
         farmerSuggestions.innerHTML = '';
 
+        highlightedIndex = -1;
+
+
         if (searchValue === '') {
 
-            farmerSuggestions.classList.add('hidden');
             farmerId.value = '';
+
+            farmerSuggestions.classList.add('hidden');
+
+            fat.value = '';
+            snf.value = '';
+
+            currentMatches = [];
+
+            updatePrice();
 
             return;
         }
 
 
-        const matches = farmerData.filter(function (farmer) {
+        // Clear selected farmer when typing
+        farmerId.value = '';
 
-            return farmer.name
-                .toLowerCase()
-                .includes(searchValue);
+        fat.value = '';
+        snf.value = '';
+
+
+        currentMatches = farmers.filter(function (farmer) {
+
+            const fullName =
+                String(farmer.full_name || '').toLowerCase();
+
+            const username =
+                String(farmer.username || '').toLowerCase();
+
+            const userId =
+                String(farmer.user_id || '').toLowerCase();
+
+
+            return (
+                fullName.includes(searchValue) ||
+                username.includes(searchValue) ||
+                userId.includes(searchValue)
+            );
 
         });
 
 
-        if (matches.length === 0) {
+        if (currentMatches.length === 0) {
 
             farmerSuggestions.classList.add('hidden');
-            farmerId.value = '';
+
+            updatePrice();
 
             return;
         }
 
 
-        matches.slice(0, 8).forEach(function (farmer) {
+        currentMatches
+            .slice(0, 8)
+            .forEach(function (farmer, index) {
 
-            const option = document.createElement('button');
+                const button =
+                    document.createElement('button');
 
-            option.type = 'button';
 
-            option.className =
-                'w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100';
+                button.type = 'button';
 
-            option.textContent =
-                farmer.name;
 
-            option.addEventListener('click', function () {
+                button.className =
+                    'w-full text-left px-4 py-3 hover:bg-gray-100 border-b border-gray-100';
 
-                farmerSearch.value = farmer.name;
-                farmerId.value = farmer.id;
 
-                farmerSuggestions.classList.add('hidden');
-                farmerError.textContent = '';
+                button.dataset.index = index;
+
+
+                // Farmer name
+                const name =
+                    document.createElement('div');
+
+
+                name.className =
+                    'font-medium text-gray-800';
+
+
+                name.textContent =
+                    farmer.full_name;
+
+
+                // User ID
+                const userId =
+                    document.createElement('div');
+
+
+                userId.className =
+                    'text-xs text-gray-500 mt-1';
+
+
+                userId.textContent =
+                    'User ID: ' + farmer.user_id;
+
+
+                button.appendChild(name);
+
+                button.appendChild(userId);
+
+
+                // Select with mouse
+                button.addEventListener(
+                    'mousedown',
+                    function (event) {
+
+                        event.preventDefault();
+
+                        selectFarmer(farmer);
+
+                    }
+                );
+
+
+                farmerSuggestions.appendChild(button);
 
             });
 
-            farmerSuggestions.appendChild(option);
-
-        });
 
         farmerSuggestions.classList.remove('hidden');
 
     }
 
 
+    // Highlight suggestion
+    function highlightSuggestion(index) {
+
+        const buttons =
+            farmerSuggestions.querySelectorAll('button');
+
+
+        if (buttons.length === 0) {
+            return;
+        }
+
+
+        if (index < 0) {
+            index = buttons.length - 1;
+        }
+
+
+        if (index >= buttons.length) {
+            index = 0;
+        }
+
+
+        highlightedIndex = index;
+
+
+        buttons.forEach(function (button, buttonIndex) {
+
+            if (buttonIndex === highlightedIndex) {
+
+                button.classList.add('bg-gray-100');
+
+                button.scrollIntoView({
+                    block: 'nearest'
+                });
+
+            } else {
+
+                button.classList.remove('bg-gray-100');
+
+            }
+
+        });
+
+    }
+
+
+    // Handle keyboard navigation
     farmerSearch.addEventListener(
-        'input',
-        showFarmerSuggestions
+        'keydown',
+        function (event) {
+
+            const buttons =
+                farmerSuggestions.querySelectorAll('button');
+
+
+            if (
+                farmerSuggestions.classList.contains('hidden') ||
+                buttons.length === 0
+            ) {
+
+                return;
+
+            }
+
+
+            // Arrow down
+            if (event.key === 'ArrowDown') {
+
+                event.preventDefault();
+
+                highlightSuggestion(
+                    highlightedIndex + 1
+                );
+
+            }
+
+
+            // Arrow up
+            else if (event.key === 'ArrowUp') {
+
+                event.preventDefault();
+
+                highlightSuggestion(
+                    highlightedIndex - 1
+                );
+
+            }
+
+
+            // Select highlighted farmer
+            else if (event.key === 'Enter') {
+
+                event.preventDefault();
+
+
+                if (highlightedIndex >= 0) {
+
+                    const selectedFarmer =
+                        currentMatches[highlightedIndex];
+
+
+                    if (selectedFarmer) {
+
+                        selectFarmer(selectedFarmer);
+
+                    }
+
+                } else {
+
+                    selectFarmer(
+                        currentMatches[0]
+                    );
+
+                }
+
+            }
+
+
+            // Close suggestions
+            else if (event.key === 'Escape') {
+
+                event.preventDefault();
+
+                farmerSuggestions.classList.add('hidden');
+
+                highlightedIndex = -1;
+
+            }
+
+        }
     );
 
 
-    document.addEventListener('click', function (event) {
+    // Select farmer
+    function selectFarmer(farmer) {
 
-        if (
-            !farmerSearch.contains(event.target) &&
-            !farmerSuggestions.contains(event.target)
-        ) {
-            farmerSuggestions.classList.add('hidden');
-        }
-
-    });
+        // Show username only in input
+        farmerSearch.value =
+            farmer.username;
 
 
-    // Check farmer
-    function checkFarmer() {
+        // Store actual farmers.id
+        farmerId.value =
+            String(farmer.farmer_id);
 
-        if (
-            farmerId.value === '' ||
-            farmerId.value === '0'
-        ) {
 
-            farmerError.textContent =
-                'Please select a farmer from the suggestions.';
-
-            return false;
-        }
+        farmerSuggestions.classList.add('hidden');
 
         farmerError.textContent = '';
 
-        return true;
+        highlightedIndex = -1;
+
+        currentMatches = [];
+
+
+        // Load shift-specific FAT/SNF
+        loadPreviousValues();
 
     }
 
 
-    // Check today's date
-    function checkDate() {
+    // Load previous FAT/SNF according to farmer and shift
+    function loadPreviousValues() {
 
-        const today = new Date();
-
-        const formattedToday =
-            today.getDate().toString().padStart(2, '0') +
-            '-' +
-            today.toLocaleString('en-US', {
-                month: 'short'
-            }) +
-            '-' +
-            today.getFullYear();
+        const selectedFarmerId =
+            String(farmerId.value);
 
 
-        if (date.value !== formattedToday) {
+        const selectedShift =
+            shift.value;
 
-            dateError.textContent =
-                'Only today\'s date is allowed.';
 
-            return false;
+        if (!selectedFarmerId) {
+
+            fat.value = '';
+            snf.value = '';
+
+            updatePrice();
+
+            return;
+
         }
 
-        dateError.textContent = '';
 
-        return true;
-
-    }
+        const farmerValues =
+            previousValues[selectedFarmerId];
 
 
-    // Check litres
-    function checkLitre() {
+        if (!farmerValues) {
 
-        const value = parseFloat(litre.value);
+            fat.value = '';
+            snf.value = '';
 
-        if (isNaN(value) || value <= 0) {
+            updatePrice();
 
-            litreError.textContent =
-                'Litres must be greater than 0.';
+            return;
 
-            return false;
         }
 
-        litreError.textContent = '';
 
-        return true;
+        const shiftValues =
+            farmerValues[selectedShift];
 
-    }
-
-
-    // Check FAT
-    function checkFat() {
-
-        const value = parseFloat(fat.value);
 
         if (
-            isNaN(value) ||
-            value <= 1.6 ||
-            value >= 8
+            shiftValues &&
+            shiftValues.fat !== undefined &&
+            shiftValues.snf !== undefined
         ) {
 
-            fatError.textContent =
-                'FAT must be greater than 1.6 and less than 8.';
+            fat.value =
+                Number(shiftValues.fat).toFixed(1);
 
-            return false;
+            snf.value =
+                Number(shiftValues.snf).toFixed(1);
+
+        } else {
+
+            fat.value = '';
+            snf.value = '';
+
         }
 
-        fatError.textContent = '';
 
-        return true;
+        checkFat();
+
+        checkSnf();
+
+        updatePrice();
 
     }
 
 
-    // Check SNF
-    function checkSnf() {
+    // Calculate milk price
+    function updatePrice() {
 
-        const value = parseFloat(snf.value);
-
-        if (
-            isNaN(value) ||
-            value <= 3 ||
-            value >= 9
-        ) {
-
-            snfError.textContent =
-                'SNF must be greater than 3 and less than 9.';
-
-            return false;
-        }
-
-        snfError.textContent = '';
-
-        return true;
-
-    }
+        const litreValue =
+            parseFloat(litre.value);
 
 
-    // Calculate rate and total amount
-    function calculateAmount() {
+        const fatValue =
+            parseFloat(fat.value);
 
-        const fatValue = parseFloat(fat.value);
-        const snfValue = parseFloat(snf.value);
-        const litreValue = parseFloat(litre.value);
+
+        const snfValue =
+            parseFloat(snf.value);
+
 
         if (
             isNaN(fatValue) ||
@@ -371,27 +462,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Rs. 0.00';
 
             return;
+
         }
 
 
         const rate =
-            (fatValue * milkFatRate) +
-            (snfValue * milkSnfRate);
+            (fatValue * fatRate) +
+            (snfValue * snfRate);
 
 
-        const amount =
-            !isNaN(litreValue)
-                ? rate * litreValue
-                : 0;
+        let amount = 0;
+
+
+        if (
+            !isNaN(litreValue) &&
+            litreValue > 0
+        ) {
+
+            amount =
+                rate * litreValue;
+
+        }
 
 
         ratePreview.textContent =
             'Rs. ' + rate.toFixed(2);
 
-        litrePreview.textContent =
-            (!isNaN(litreValue)
-                ? litreValue.toFixed(1)
-                : '0.0') + ' L';
 
         amountPreview.textContent =
             'Rs. ' + amount.toFixed(2);
@@ -399,121 +495,401 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    // Save FAT/SNF when changed
-    fat.addEventListener('input', function () {
+    // Validate farmer
+    function checkFarmer() {
 
-        saveCurrentShiftValues();
-
-        fatError.textContent = '';
-
-        calculateAmount();
-
-    });
+        const value =
+            farmerSearch.value.trim();
 
 
-    snf.addEventListener('input', function () {
+        if (value === '') {
 
-        saveCurrentShiftValues();
+            farmerError.textContent =
+                'Please enter farmer name or user ID.';
 
-        snfError.textContent = '';
+            return false;
 
-        calculateAmount();
-
-    });
-
-
-    // Change FAT/SNF when shift changes
-    shift.addEventListener('change', function () {
-
-        loadShiftValues();
-
-    });
-
-
-    litre.addEventListener('input', function () {
-
-        litreError.textContent = '';
-
-        calculateAmount();
-
-    });
-
-
-    farmerSearch.addEventListener('blur', function () {
-
-        setTimeout(function () {
-            checkFarmer();
-        }, 200);
-
-    });
-
-
-    // Validate on blur
-    date.addEventListener('blur', checkDate);
-    litre.addEventListener('blur', checkLitre);
-    fat.addEventListener('blur', checkFat);
-    snf.addEventListener('blur', checkSnf);
-
-
-    // Final validation
-    form.addEventListener('submit', function (event) {
-
-        const validFarmer = checkFarmer();
-        const validDate = checkDate();
-        const validLitre = checkLitre();
-        const validFat = checkFat();
-        const validSnf = checkSnf();
-
-
-        if (
-            !validFarmer ||
-            !validDate ||
-            !validLitre ||
-            !validFat ||
-            !validSnf
-        ) {
-
-            event.preventDefault();
-
-            return;
         }
 
 
-        saveCurrentShiftValues();
+        if (farmerId.value === '') {
 
-    });
+            farmerError.textContent =
+                'Please select a farmer from the suggestions.';
+
+            return false;
+
+        }
+
+
+        const selectedFarmer =
+            farmers.find(function (farmer) {
+
+                return String(farmer.farmer_id) ===
+                    String(farmerId.value);
+
+            });
+
+
+        if (!selectedFarmer) {
+
+            farmerError.textContent =
+                'Please select a valid farmer.';
+
+            farmerId.value = '';
+
+            return false;
+
+        }
+
+
+        farmerError.textContent = '';
+
+        return true;
+
+    }
+
+
+    // Validate date
+    function checkDate() {
+
+        const now =
+            new Date();
+
+
+        const year =
+            now.getFullYear();
+
+
+        const month =
+            String(now.getMonth() + 1)
+                .padStart(2, '0');
+
+
+        const day =
+            String(now.getDate())
+                .padStart(2, '0');
+
+
+        const currentDate =
+            year +
+            '-' +
+            month +
+            '-' +
+            day;
+
+
+        if (date.value !== currentDate) {
+
+            dateError.textContent =
+                'Only today\'s date is allowed.';
+
+            return false;
+
+        }
+
+
+        dateError.textContent = '';
+
+        return true;
+
+    }
+
+
+    // Validate litres
+    function checkLitre() {
+
+        const value =
+            parseFloat(litre.value);
+
+
+        if (
+            isNaN(value) ||
+            value <= 0
+        ) {
+
+            litreError.textContent =
+                'Litres must be greater than 0.';
+
+            updatePrice();
+
+            return false;
+
+        }
+
+
+        litreError.textContent = '';
+
+        updatePrice();
+
+        return true;
+
+    }
+
+
+    // Validate FAT
+    function checkFat() {
+
+        const value =
+            parseFloat(fat.value);
+
+
+        if (isNaN(value)) {
+
+            fatError.textContent =
+                'Please enter FAT.';
+
+            updatePrice();
+
+            return false;
+
+        }
+
+
+        if (
+            value <= 1.6 ||
+            value >= 8
+        ) {
+
+            fatError.textContent =
+                'FAT must be greater than 1.6 and less than 8.';
+
+            updatePrice();
+
+            return false;
+
+        }
+
+
+        fatError.textContent = '';
+
+        updatePrice();
+
+        return true;
+
+    }
+
+
+    // Validate SNF
+    function checkSnf() {
+
+        const value =
+            parseFloat(snf.value);
+
+
+        if (isNaN(value)) {
+
+            snfError.textContent =
+                'Please enter SNF.';
+
+            updatePrice();
+
+            return false;
+
+        }
+
+
+        if (
+            value <= 3 ||
+            value >= 9
+        ) {
+
+            snfError.textContent =
+                'SNF must be greater than 3 and less than 9.';
+
+            updatePrice();
+
+            return false;
+
+        }
+
+
+        snfError.textContent = '';
+
+        updatePrice();
+
+        return true;
+
+    }
+
+
+    // Farmer search
+    farmerSearch.addEventListener(
+        'input',
+        showFarmerSuggestions
+    );
+
+
+    // Close suggestions
+    document.addEventListener(
+        'click',
+        function (event) {
+
+            if (
+                !farmerSearch.contains(event.target) &&
+                !farmerSuggestions.contains(event.target)
+            ) {
+
+                farmerSuggestions.classList.add('hidden');
+
+            }
+
+        }
+    );
+
+
+    // Validate farmer when leaving search
+    farmerSearch.addEventListener(
+        'blur',
+        function () {
+
+            setTimeout(function () {
+
+                checkFarmer();
+
+            }, 200);
+
+        }
+    );
+
+
+    // Change FAT/SNF when shift changes
+    shift.addEventListener(
+        'change',
+        function () {
+
+            loadPreviousValues();
+
+        }
+    );
+
+
+    // Update price when litres change
+    litre.addEventListener(
+        'input',
+        function () {
+
+            checkLitre();
+
+        }
+    );
+
+
+    // Update price when FAT changes
+    fat.addEventListener(
+        'input',
+        function () {
+
+            checkFat();
+
+        }
+    );
+
+
+    // Update price when SNF changes
+    snf.addEventListener(
+        'input',
+        function () {
+
+            checkSnf();
+
+        }
+    );
+
+
+    // Validate before submit
+    form.addEventListener(
+        'submit',
+        function (event) {
+
+            const validFarmer =
+                checkFarmer();
+
+
+            const validDate =
+                checkDate();
+
+
+            const validLitre =
+                checkLitre();
+
+
+            const validFat =
+                checkFat();
+
+
+            const validSnf =
+                checkSnf();
+
+
+            if (
+                !validFarmer ||
+                !validDate ||
+                !validLitre ||
+                !validFat ||
+                !validSnf
+            ) {
+
+                event.preventDefault();
+
+            }
+
+        }
+    );
 
 
     // Reset form
     if (resetButton) {
 
-        resetButton.addEventListener('click', function () {
+        resetButton.addEventListener(
+            'click',
+            function () {
 
-            setTimeout(function () {
+                setTimeout(function () {
 
-                farmerSearch.value = '';
-                farmerId.value = '';
+                    farmerSearch.value = '';
 
-                litre.value = '';
+                    farmerId.value = '';
 
-                farmerSuggestions.classList.add('hidden');
+                    fat.value = '';
 
-                farmerError.textContent = '';
-                dateError.textContent = '';
-                litreError.textContent = '';
-                fatError.textContent = '';
-                snfError.textContent = '';
+                    snf.value = '';
 
-                loadShiftValues();
+                    litre.value = '';
 
-            }, 0);
 
-        });
+                    farmerSuggestions.classList.add(
+                        'hidden'
+                    );
+
+
+                    farmerError.textContent = '';
+
+                    dateError.textContent = '';
+
+                    litreError.textContent = '';
+
+                    fatError.textContent = '';
+
+                    snfError.textContent = '';
+
+
+                    currentMatches = [];
+
+                    highlightedIndex = -1;
+
+
+                    updatePrice();
+
+                }, 0);
+
+            }
+        );
 
     }
 
 
-    loadShiftValues();
-    calculateAmount();
+    // Initial price
+    updatePrice();
 
 });
